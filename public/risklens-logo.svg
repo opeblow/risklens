@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="RiskLens">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="RiskLens — Solana mint risk analyzer">
   <defs>
     <linearGradient id="rl-grad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#4EDE88"/>

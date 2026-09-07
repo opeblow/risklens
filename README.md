@@ -1,32 +1,134 @@
-# React + TypeScript + Vite
+# RiskLens
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+<img src="public/risklens-logo.svg" width="88" height="88" alt="RiskLens logo" align="right" />
 
-Currently, two official plugins are available:
+**The DeFi Risk Copilot for Solana** — paste any mint address (or pick a trending token) and get a live risk score, letter grade, and a plain-English breakdown of exactly what could hurt your bag.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Built for the [NoahAI Hackathon](https://trynoah.ai/hackathon) on the NoahAI design system.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What it does
 
-## Expanding the Oxlint configuration
+RiskLens turns the cold, opaque wall of on-chain data into one decision: **how risky is this token?**
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **Instant scoring** — a 0–100 risk score with a letter grade (`A` low risk → `F` critical) for any Solana SPL mint, including native SOL.
+- **Factor-by-factor report** — every score is broken into weighted, human-readable factors with the on-chain evidence behind each one.
+- **Live data, resilient** — reads real mint/authority/supply state from Solana RPC and live market data (Jupiter, with a CoinGecko fallback), so the demo doesn't break when an API does.
+- **Trending picks** — 10 curated, verified mints (SOL, USDC, BONK, JUP, WIF, PYTH, jitoSOL, mSOL, JTO, MNDE).
+- **Wallet aware** — connect Phantom to see your SOL balance beside the analysis.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+### Scoring model
+
+| Factor | Weight | What it detects |
+| --- | ---: | --- |
+| Mint authority | 20 | Can someone mint infinite supply? |
+| Liquidity / market cap | 15 | Rug-pullable or manipulable market size |
+| Supply distribution | 15 | Locked/unlisted supply that can dump later |
+| Freeze authority | 10 | Can balances be frozen? |
+| Permanent delegate | 10 | Can a delegate move every holder's tokens? |
+| 24h turnover | 10 | Wash trading or churn vs. market cap |
+| 24h volatility | 10 | Extreme moves consistent with pump & dump |
+| Trust signals | 10 | Audits, logo/metadata, established tokens |
+| Contract age | 5 | Freshly deployed = unproven |
+
+**Grades:** `A` ≤ 19 · `B` ≤ 34 · `C` ≤ 49 · `D` ≤ 69 · `F` > 69
+
+### Resilience design
+
+- Scores **never crash when a data source does**: if market data is unavailable, affected factors fall back to a neutral 50 so the rest of the report stays honest.
+- Prices are cached for 120 s; RPC endpoints are tried in order with failover.
+- Native SOL is detected and scored as a first-class asset, and invalid inputs report *"no SPL token mint found"* instead of a false "clean" verdict.
+
+## Tech stack
+
+| Layer | Choice |
+| --- | --- |
+| UI | React 19, React Router 7, Vite 8, Tailwind CSS 4 |
+| Design | NoahAI design tokens (`#4EDE88 → #0188FB → #7D7AFF`, dark surfaces) |
+| On-chain | `@solana/web3.js` parsed accounts + Metaplex metadata parsing |
+| Market data | Jupiter API with CoinGecko fallback |
+| Wallet | `@solana/wallet-adapter-react` (Phantom) |
+| Checks | TypeScript `tsc`, Oxlint, single-command `pnpm build` |
+
+## Getting started
+
+**Prerequisites:** Node.js ≥ 20, pnpm ≥ 9.
+
+```sh
+# install
+pnpm install
+
+# run the dev server (http://localhost:5173)
+pnpm dev
+
+# production build — runs tsc + vite build
+pnpm build
+
+# lint
+pnpm lint
+
+# preview the production build
+pnpm preview
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Test the scoring engine without a browser
+
+The analysis core is framework-free and runs under Node, so it can be tested against live mainnet data headlessly:
+
+```sh
+pnpm exec vite build --ssr scripts/engine-entry.ts --outDir .tmp-ssr
+node scripts/smoke.mjs   # USDC, SOL, jitoSOL, WIF, PYTH, and an invalid input
+```
+
+Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); genuinely flaky results would indicate a live-data regression.
+
+## Project structure
+
+```
+src/
+  pages/             Home, Analyze
+  components/
+    app/             RiskReport, Leaderboard, WalletButton
+    landing/         Hero, Features, HowItWorks, Pricing, …
+    layout/          Navbar, Footer
+    ui/              Button, Card, ScoreGauge, RiskBadge, Logo
+  lib/
+    solana/
+      rpc.ts         RPC failover, SPL mint parsing, native SOL
+      jupiter.ts     Price/meta: Jupiter API → CoinGecko fallback
+      risk.ts        Scoring engine + report generation
+      wallet.ts      Wallet helpers
+    storage.ts       Local history (attestations)
+  index.css          NoahAI design tokens
+scripts/
+  engine-entry.ts    SSR export of analyzeMint for headless testing
+  smoke.mjs, diag.mjs  Live mainnet smoke tests
+public/              risklens-logo.svg, favicon.svg, redirects
+```
+
+## Deploying
+
+The app is a static SPA; route `/analyze/:mint` needs a SPA fallback:
+
+- **Netlify** — `public/_redirects` is copied into the build output automatically.
+- **Vercel** — `vercel.json` rewrites everything to `index.html`.
+- **Cloudflare Pages** — also honors `public/_redirects`.
+
+```sh
+pnpm build   # outputs to dist/
+```
+
+Environment variables: none required. All analysis happens client-side against public RPC and market APIs.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, conventions, and how to add a mint or tune a factor.
+
+## Security
+
+Found a bug or a way to make RiskLens misleading or unsafe? See [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 RiskLens contributors
