@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* NoahAI brand palette (extracted from production bundle) */
+  --color-noah-bg: #0f1215;
+  --color-noah-bg-2: #18181b;
+  --color-noah-surface: #14171b;
+  --color-noah-surface-2: #1c2025;
+  --color-noah-border: #262b31;
+  --color-noah-border-2: #31373f;
+
+  --color-noah-blue: #0188fb;
+  --color-noah-blue-2: #61dafb;
+  --color-noah-purple: #7d7aff;
+  --color-noah-purple-2: #9d57f9;
+  --color-noah-green: #4ede88;
+  --color-noah-orange: #ff954b;
+  --color-noah-amber: #ffb45e;
+  --color-noah-red: #e24c5d;
+
+  --color-noah-light: #ebebf5;
+  --color-noah-muted: #9aa1ab;
+  --color-noah-muted-2: #6b7280;
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+
+  --animate-fade-up: fade-up 0.5s ease-out both;
+  --animate-glow: glow 4s ease-in-out infinite;
+  --animate-marquee: marquee 34s linear infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes glow {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 0.9;
+    }
+  }
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-noah-bg);
+  color: var(--color-noah-light);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-noah-blue) 35%, transparent);
+}
+
+.noah-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.noah-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-noah-border-2);
+  border-radius: 999px;
+}
+.noah-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, #4ede88 0%, #0188fb 45%, #7d7aff 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--color-noah-surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+}
