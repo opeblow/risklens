@@ -4,8 +4,6 @@
 
 **The DeFi Risk Copilot for Solana** — paste any mint address (or pick a trending token) and get a live risk score, letter grade, and a plain-English breakdown of exactly what could hurt your bag.
 
-Built for the [NoahAI Hackathon](https://trynoah.ai/hackathon).
-
 ---
 
 ## What it does
@@ -93,7 +91,7 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 ├── public/
 │   ├── _redirects                 # Netlify/Cloudflare Pages SPA fallback
 │   ├── favicon.svg                # RiskLens mark (browser tab)
-│   ├── noah.svg                   # NoahAI platform mark
+│   ├── noah.svg                   # Noah platform mark
 │   ├── risklens-logo.svg          # Product logo
 │   └── icons.svg
 ├── scripts/                       # Headless testing of the scoring engine
