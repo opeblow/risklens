@@ -148,7 +148,9 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 ├── pnpm-workspace.yaml
 ├── README.md
 ├── SECURITY.md
-├── tsconfig.json / tsconfig.app.json / tsconfig.node.json
+├── tsconfig.json
+├── tsconfig.app.json
+├── tsconfig.node.json
 ├── vercel.json                    # Vercel SPA rewrites
 └── vite.config.ts
 ```
