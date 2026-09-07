@@ -86,25 +86,73 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 ## Project structure
 
 ```
-src/
-  pages/             Home, Analyze
-  components/
-    app/             RiskReport, Leaderboard, WalletButton
-    landing/         Hero, Features, HowItWorks, Pricing, …
-    layout/          Navbar, Footer
-    ui/              Button, Card, ScoreGauge, RiskBadge, Logo
-  lib/
-    solana/
-      rpc.ts         RPC failover, SPL mint parsing, native SOL
-      jupiter.ts     Price/meta: Jupiter API → CoinGecko fallback
-      risk.ts        Scoring engine + report generation
-      wallet.ts      Wallet helpers
-    storage.ts       Local history (attestations)
-  index.css          NoahAI design tokens
-scripts/
-  engine-entry.ts    SSR export of analyzeMint for headless testing
-  smoke.mjs, diag.mjs  Live mainnet smoke tests
-public/              risklens-logo.svg, favicon.svg, redirects
+.
+├── .github/
+│   └── workflows/
+│       └── ci.yml                 # lint + typecheck + build on push/PR
+├── public/
+│   ├── _redirects                 # Netlify/Cloudflare Pages SPA fallback
+│   ├── favicon.svg                # RiskLens mark (browser tab)
+│   ├── noah.svg                   # NoahAI platform mark
+│   ├── risklens-logo.svg          # Product logo
+│   └── icons.svg
+├── scripts/                       # Headless testing of the scoring engine
+│   ├── engine-entry.ts            # SSR entry that exports analyzeMint
+│   ├── smoke.mjs                  # Live mainnet smoke test (6 mints)
+│   └── diag.mjs                   # Repeated-pass diagnostics per mint
+├── src/
+│   ├── assets/hero.png
+│   ├── pages/
+│   │   ├── Analyze.tsx            # 🔎 analyze/:mint — the core page
+│   │   └── Home.tsx               # Landing
+│   ├── components/
+│   │   ├── app/                   # Product UI
+│   │   │   ├── RiskReport.tsx     # Factor breakdown + score gauge
+│   │   │   ├── Leaderboard.tsx    # Trending picks
+│   │   │   └── WalletButton.tsx   # Phantom connect + SOL balance
+│   │   ├── landing/               # Home sections
+│   │   │   ├── Hero.tsx
+│   │   │   ├── Features.tsx
+│   │   │   ├── HowItWorks.tsx
+│   │   │   ├── Integrations.tsx
+│   │   │   ├── Pricing.tsx
+│   │   │   └── CommunityGrid.tsx
+│   │   ├── layout/
+│   │   │   ├── Navbar.tsx
+│   │   │   └── Footer.tsx
+│   │   └── ui/                    # NoahAI design system
+│   │       ├── Button.tsx
+│   │       ├── Card.tsx
+│   │       ├── Logo.tsx
+│   │       ├── RiskBadge.tsx
+│   │       ├── ScoreGauge.tsx
+│   │       └── Spinner.tsx
+│   ├── lib/
+│   │   ├── solana/
+│   │   │   ├── rpc.ts             # RPC failover, SPL mint parsing, native SOL
+│   │   │   ├── jupiter.ts         # Price/meta: Jupiter API → CoinGecko fallback
+│   │   │   ├── risk.ts            # Scoring engine + report generation
+│   │   │   ├── wallet.ts          # Wallet helpers
+│   │   │   └── WalletProvider.tsx
+│   │   ├── storage.ts             # Local analysis history
+│   │   └── types.ts               # Shared types (RiskReport, OnchainMintInfo…)
+│   ├── App.tsx                    # Routes
+│   ├── index.css                  # NoahAI design tokens
+│   └── main.tsx
+├── .gitignore
+├── .npmrc
+├── .oxlintrc.json
+├── CONTRIBUTING.md
+├── index.html
+├── LICENSE
+├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── README.md
+├── SECURITY.md
+├── tsconfig.json / tsconfig.app.json / tsconfig.node.json
+├── vercel.json                    # Vercel SPA rewrites
+└── vite.config.ts
 ```
 
 ## Deploying
