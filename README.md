@@ -4,7 +4,7 @@
 
 **The DeFi Risk Copilot for Solana** — paste any mint address (or pick a trending token) and get a live risk score, letter grade, and a plain-English breakdown of exactly what could hurt your bag.
 
-Built for the [NoahAI Hackathon](https://trynoah.ai/hackathon) on the NoahAI design system.
+Built for the [NoahAI Hackathon](https://trynoah.ai/hackathon).
 
 ---
 
@@ -45,7 +45,7 @@ RiskLens turns the cold, opaque wall of on-chain data into one decision: **how r
 | Layer | Choice |
 | --- | --- |
 | UI | React 19, React Router 7, Vite 8, Tailwind CSS 4 |
-| Design | NoahAI design tokens (`#4EDE88 → #0188FB → #7D7AFF`, dark surfaces) |
+| Design | Dark surfaces with a signature gradient (`#4EDE88 → #0188FB → #7D7AFF`) |
 | On-chain | `@solana/web3.js` parsed accounts + Metaplex metadata parsing |
 | Market data | Jupiter API with CoinGecko fallback |
 | Wallet | `@solana/wallet-adapter-react` (Phantom) |
@@ -103,7 +103,7 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 ├── src/
 │   ├── assets/hero.png
 │   ├── pages/
-│   │   ├── Analyze.tsx            # 🔎 analyze/:mint — the core page
+│   │   ├── Analyze.tsx            # analyze/:mint — the core page
 │   │   └── Home.tsx               # Landing
 │   ├── components/
 │   │   ├── app/                   # Product UI
@@ -120,7 +120,7 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 │   │   ├── layout/
 │   │   │   ├── Navbar.tsx
 │   │   │   └── Footer.tsx
-│   │   └── ui/                    # NoahAI design system
+│   │   └── ui/                    # Reusable UI primitives
 │   │       ├── Button.tsx
 │   │       ├── Card.tsx
 │   │       ├── Logo.tsx
@@ -137,7 +137,7 @@ Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); ge
 │   │   ├── storage.ts             # Local analysis history
 │   │   └── types.ts               # Shared types (RiskReport, OnchainMintInfo…)
 │   ├── App.tsx                    # Routes
-│   ├── index.css                  # NoahAI design tokens
+│   ├── index.css                  # Design tokens
 │   └── main.tsx
 ├── .gitignore
 ├── .npmrc
