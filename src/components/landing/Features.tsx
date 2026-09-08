@@ -8,8 +8,8 @@ const features = [
   },
   {
     icon: 'M3 3v18h18M8 13l3-3 3 3 4-5',
-    title: 'Liquidity Health',
-    desc: 'Market cap vs. 24h volume tells you if a token can actually be exited — and whether volume looks washed.',
+    title: 'Market Size & Activity',
+    desc: 'Estimates market-exit risk from market size, trading volume, and available activity indicators.',
   },
   {
     icon: 'M4 4v6a8 8 0 0016 0V4M4 12h16',
@@ -19,7 +19,7 @@ const features = [
   {
     icon: 'M13 2L3 14h7l-1 8 10-12h-7l1-8z',
     title: 'Volatility & Pump Detection',
-    desc: 'Extreme 24h price moves are flagged as manipulation or pump candidates, not rallies.',
+    desc: 'Extreme 24h price moves are flagged for heightened volatility and market-manipulation risk, not rallies.',
   },
   {
     icon: 'M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -42,7 +42,7 @@ export default function Features() {
             Everything You Need to Check a Token
           </span>
           <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            One prompt.{' '}
+            One address.{' '}
             <span className="text-gradient">Every risk factor.</span>
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-noah-muted">

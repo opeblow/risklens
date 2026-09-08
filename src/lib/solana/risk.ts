@@ -17,6 +17,45 @@ export const RISK_GRADES = [
   { max: 100, grade: 'F', level: 'critical' as RiskLevel, label: 'Critical' },
 ]
 
+/**
+ * The documented fixed-weight scoring model. Weights are applied directly as
+ * a 100-point basis; when a factor's evidence is missing the dynamic
+ * denominator renormalizes the remaining weights while `coverage` records
+ * what could not be verified (it never inflates a "clean" verdict).
+ */
+export const RISK_MODEL_WEIGHTS = {
+  'mint-auth': 20,
+  freeze: 10,
+  delegate: 10,
+  holders: 10,
+  supply: 15,
+  liquidity: 15,
+  turnover: 5,
+  volatility: 5,
+  trust: 5,
+  age: 5,
+  'transfer-hook': 5,
+  'mint-close': 5,
+  onchain: 20,
+} as const
+
+/** Sum of the documented base weights (all core factors, before Token-2022 extras). */
+export function baseModelWeight(): number {
+  const base: Array<keyof typeof RISK_MODEL_WEIGHTS> = [
+    'mint-auth',
+    'freeze',
+    'delegate',
+    'holders',
+    'supply',
+    'liquidity',
+    'turnover',
+    'volatility',
+    'trust',
+    'age',
+  ]
+  return base.reduce((sum, k) => sum + RISK_MODEL_WEIGHTS[k], 0)
+}
+
 export function gradeForScore(score: number): {
   grade: string
   level: RiskLevel
@@ -177,7 +216,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'transfer-hook',
         title: 'Transfer hook enabled',
         severity: 'high',
-        weight: 8,
+        weight: 5,
         score: 75,
         detail:
           'Every transfer triggers an external program, which can tax, blacklist, or otherwise interfere with transactions.',
@@ -189,7 +228,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'mint-close',
         title: 'Mint close authority present',
         severity: 'medium',
-        weight: 6,
+        weight: 5,
         score: 60,
         detail:
           'The mint can be closed by an authority, which permanently destroys all outstanding tokens.',
@@ -279,7 +318,66 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
     })
   }
 
-  // 5. Market size (liquidity health)
+  // 5. Holder concentration (from Jupiter audit data)
+  const topHolders = token?.audit?.topHoldersPercentage ?? null
+  const devMints = token?.audit?.devMints ?? null
+  if (topHolders != null) {
+    if (topHolders >= 60) {
+      f.push({
+        id: 'holders',
+        title: 'Heavily concentrated holders',
+        severity: 'critical',
+        weight: 10,
+        score: 85,
+        detail: `Top holders control ${Math.round(topHolders)}% of supply. A small group can sway price or dump at once.`,
+        evidence: `top holders ${Math.round(topHolders)}%`,
+      })
+    } else if (topHolders >= 30) {
+      f.push({
+        id: 'holders',
+        title: 'Concentrated holders',
+        severity: 'medium',
+        weight: 10,
+        score: 50,
+        detail: `Top holders control ${Math.round(topHolders)}% of supply — meaningful single-group influence.`,
+        evidence: `top holders ${Math.round(topHolders)}%`,
+      })
+    } else {
+      f.push({
+        id: 'holders',
+        title: 'Well-distributed holders',
+        severity: 'low',
+        weight: 10,
+        score: 8,
+        detail: `Top holders control only ${Math.round(topHolders)}% of supply — ownership is reasonably spread.`,
+        evidence: `top holders ${Math.round(topHolders)}%`,
+      })
+    }
+  } else if (devMints != null && devMints > 0) {
+    f.push({
+      id: 'holders',
+      title: 'Developer-held supply detected',
+      severity: 'medium',
+      weight: 10,
+      score: 55,
+      detail: `The developer holds ${devMints} mint${devMints > 1 ? 's' : ''} of supply, which can be sold or used to distort price.`,
+      evidence: `dev mints ${devMints}`,
+    })
+  } else if (onchain?.existsOnChain) {
+    f.push({
+      id: 'holders',
+      title: 'Holder distribution unavailable',
+      severity: 'medium',
+      weight: 10,
+      score: 50,
+      detail:
+        'Could not verify holder concentration. Large single holders may still exist.',
+      evidence: 'holder n/a',
+      unverified: true,
+    })
+  }
+
+  // 6. Market size (liquidity health)
   const mcap = price?.marketCap ? Number(price.marketCap) : null
   const vol = price?.volume24h ? Number(price.volume24h) : token?.daily_volume
   if (mcap != null) {
@@ -310,7 +408,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         severity: 'low',
         weight: 15,
         score: 8,
-        detail: `Market cap is ${fmtUsd(mcap)}, suggesting usable on-chain liquidity.`,
+        detail: `Reported market size is ${fmtUsd(mcap)}. Execution liquidity and price impact should be evaluated separately.`,
         evidence: fmtUsd(mcap),
       })
     }
@@ -319,11 +417,11 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       if (turnover > 2) {
         f.push({
           id: 'turnover',
-          title: 'Extreme 24h volume vs cap',
+          title: 'Unusually high 24h volume vs cap',
           severity: 'high',
-          weight: 10,
+          weight: 5,
           score: 70,
-          detail: `24h volume is ${turnover.toFixed(1)}× the market cap — consistent with wash trading or accumulator churn.`,
+          detail: `24h volume is ${turnover.toFixed(1)}× the market cap. Possible causes include high speculation, market-maker activity or artificial volume.`,
           evidence: `vol/cap ${turnover.toFixed(1)}×`,
         })
       } else if (turnover > 0.2) {
@@ -331,7 +429,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
           id: 'turnover',
           title: 'Active trading',
           severity: 'low',
-          weight: 10,
+          weight: 5,
           score: 15,
           detail: `Volume is healthy relative to cap.`,
           evidence: `vol/cap ${turnover.toFixed(1)}×`,
@@ -341,7 +439,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
           id: 'turnover',
           title: 'Thin trading volume',
           severity: 'medium',
-          weight: 10,
+          weight: 5,
           score: 55,
           detail: `24h volume is only ${(turnover * 100).toFixed(0)}% of cap — exiting positions may be hard.`,
           evidence: `vol/cap ${turnover.toFixed(1)}×`,
@@ -352,7 +450,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'turnover',
         title: 'Volume data unavailable',
         severity: 'medium',
-        weight: 10,
+        weight: 5,
         score: 50,
         detail: 'Could not verify 24h trading volume for this token.',
         evidence: 'vol n/a',
@@ -375,7 +473,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'turnover',
       title: 'Volume data unavailable',
       severity: 'medium',
-      weight: 10,
+      weight: 5,
       score: 50,
       detail:
         'Could not verify 24h trading volume or market depth for this token.',
@@ -384,7 +482,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
     })
   }
 
-  // 6. Price volatility
+  // 7. Price volatility
   if (price?.priceChange24h != null) {
     const chg = Number(price.priceChange24h)
     const a = Math.abs(chg)
@@ -393,9 +491,9 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'volatility',
         title: 'Extreme 24h price move',
         severity: 'critical',
-        weight: 10,
+        weight: 5,
         score: 80,
-        detail: `Price moved ${chg > 0 ? '+' : ''}${chg.toFixed(1)}% in 24h — high manipulation or pump risk.`,
+        detail: `Price moved ${chg > 0 ? '+' : ''}${chg.toFixed(1)}% in 24h — extreme movement increases volatility and market-manipulation risk.`,
         evidence: `${chg > 0 ? '+' : ''}${chg.toFixed(0)}% 24h`,
       })
     } else if (a > 40) {
@@ -403,7 +501,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'volatility',
         title: 'Large 24h price move',
         severity: 'medium',
-        weight: 10,
+        weight: 5,
         score: 45,
         detail: `Price moved ${chg > 0 ? '+' : ''}${chg.toFixed(1)}% in 24h.`,
         evidence: `${chg > 0 ? '+' : ''}${chg.toFixed(0)}% 24h`,
@@ -413,7 +511,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
         id: 'volatility',
         title: 'Stable price action',
         severity: 'low',
-        weight: 10,
+        weight: 5,
         score: 8,
         detail: `Price is relatively stable over 24h.`,
         evidence: `${chg > 0 ? '+' : ''}${chg.toFixed(1)}% 24h`,
@@ -424,7 +522,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'volatility',
       title: 'Price move unknown',
       severity: 'medium',
-      weight: 10,
+      weight: 5,
       score: 50,
       detail: 'Could not determine 24h price movement.',
       evidence: '24h n/a',
@@ -498,10 +596,10 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'trust',
       title: 'Verified on Jupiter',
       severity: 'low',
-      weight: 10,
+      weight: 5,
       score: 0,
       detail:
-        'This token is in Jupiter’s verified list — it passes rigorous listing checks.',
+        'Recognized as verified by Jupiter. This is a positive ecosystem signal, but it is not a security audit.',
       evidence: 'verified',
     })
   } else if (community) {
@@ -509,7 +607,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'trust',
       title: 'Community-listed token',
       severity: 'medium',
-      weight: 10,
+      weight: 5,
       score: 50,
       detail:
         'Listed as a community token on Jupiter — a somewhat higher degree of scrutiny is warranted.',
@@ -520,7 +618,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'trust',
       title: 'Not verified',
       severity: 'high',
-      weight: 10,
+      weight: 5,
       score: 60,
       detail:
         'This mint does not carry Jupiter’s verified tag. Exercise extra caution.',
@@ -531,7 +629,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'trust',
       title: 'No verification data',
       severity: 'high',
-      weight: 10,
+      weight: 5,
       score: 65,
       detail:
         'No listing / verification evidence is available for this mint.',
@@ -543,7 +641,7 @@ export function buildFactors(i: ScoreInput): RiskFactor[] {
       id: 'trust',
       title: 'Trust status unverified',
       severity: 'medium',
-      weight: 10,
+      weight: 5,
       score: 50,
       detail:
         'Could not verify this token’s listing or community status.',

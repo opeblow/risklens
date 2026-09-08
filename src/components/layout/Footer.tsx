@@ -26,8 +26,11 @@ export default function Footer() {
               <Logo size={30} />
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-noah-muted">
-              Launch a Dapp in Minutes. Write, refine, and execute your ideas
-              effortlessly using AI-powered guidance.
+              RiskLens turns Solana token data into transparent, factor-by-factor
+              risk intelligence.
+            </p>
+            <p className="mt-2 text-xs text-noah-muted-2">
+              Built with NoahAI for the NoahAI Hackathon.
             </p>
             <div className="mt-5 flex gap-3">
               {['X', 'TG', 'GH'].map((s) => (
@@ -66,7 +69,11 @@ export default function Footer() {
           <span className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-noah-green" />
-              Powered by Solana
+              Powered by Solana data
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-noah-purple-2" />
+              Built with NoahAI
             </span>
             <a href="#" className="hover:text-white">
               Terms

@@ -46,7 +46,7 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
     try {
       const address = publicKey.toBase58()
       const message =
-        `RiskLens attestation — I assessed ${report.mint} with my wallet. ` +
+        `RiskLens review — I assessed ${report.mint} with my wallet. ` +
         `Score ${report.riskScore}/100 (${report.grade}). ` +
         `Nonce: ${Date.now().toString(36)}.`
       const signature = await signAttestationMessage(message, signMessage)
@@ -136,12 +136,12 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
             onClick={onAttest}
           >
             {hasSigned
-              ? '✓ Attested'
+              ? '✓ Saved'
               : signing
                 ? 'Signing…'
                 : connected
-                  ? 'Attest with wallet'
-                  : 'Connect to attest'}
+                  ? 'Sign & save review'
+                  : 'Connect to sign'}
           </Button>
           <a
             className="inline-flex h-8 items-center rounded-xl px-3 text-xs font-medium text-noah-blue transition-colors hover:text-noah-blue-2"
@@ -155,12 +155,12 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
         {!connected && (
           <p className="mt-3 text-[11px] text-noah-muted-2">
             Connect a wallet to sign your risk review. The signed message is
-            stored locally in this browser and listed under Attestations.
+            stored locally in this browser under “My signed risk reviews”.
           </p>
         )}
         {signed && (
           <p className="mt-3 text-[12px] font-medium text-noah-green">
-            Signature stored in your local attestation history.
+            Signature stored locally in “My signed risk reviews”.
           </p>
         )}
       </Card>

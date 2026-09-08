@@ -1,13 +1,10 @@
 const integrations = [
-  'Pump.fun',
-  'Metaplex',
-  'Raydium',
+  'NoahAI',
+  'Solana',
   'Jupiter',
-  'Supabase',
-  'OpenAI',
-  'Anthropic',
-  'Gemini',
-  'Grok',
+  'CoinGecko',
+  'Metaplex',
+  'Phantom',
 ]
 
 export default function Integrations() {

@@ -1,5 +1,6 @@
 import assert from 'node:assert'
 import {
+  baseModelWeight,
   buildReport,
   filterValidSearchResults,
   gradeForScore,
@@ -58,6 +59,10 @@ const cleanReport = buildReport({
     name: 'Solana',
     tags: { verified: true },
     created_at: 1600000000,
+    audit: {
+      topHoldersPercentage: 12,
+      devMints: 0,
+    },
   },
   price: {
     id: SOL_MINT,
@@ -75,6 +80,25 @@ assert.strictEqual(cleanReport.coverage.missingChecks, 0)
 assert.ok(cleanReport.summary.includes('relatively clean'))
 assert.ok(cleanReport.factors.some((f) => f.id === 'freeze'))
 assert.ok(cleanReport.factors.some((f) => f.id === 'trust'))
+assert.ok(cleanReport.factors.some((f) => f.id === 'holders'))
+assert.strictEqual(
+  cleanReport.factors.find((f) => f.id === 'holders')?.severity,
+  'low',
+)
+
+// 2b. Concentrated holders push risk up via the holder factor.
+const concentratedReport = buildReport({
+  onchain: fullOnchain(),
+  token: {
+    address: SOL_MINT,
+    symbol: 'SOL',
+    name: 'Solana',
+    audit: { topHoldersPercentage: 85, devMints: 3 },
+  },
+  price: null,
+})
+const holderFactor = concentratedReport.factors.find((f) => f.id === 'holders')
+assert.strictEqual(holderFactor?.severity, 'critical')
 
 // 3. On-chain mint with NO market data → limited coverage, no clean verdict.
 const blindReport = buildReport({
@@ -196,5 +220,8 @@ assert.strictEqual(gradeForScore(20).grade, 'B')
 assert.strictEqual(gradeForScore(35).grade, 'C')
 assert.strictEqual(gradeForScore(50).grade, 'D')
 assert.strictEqual(gradeForScore(70).grade, 'F')
+
+// 11. The documented base scoring model must total exactly 100.
+assert.strictEqual(baseModelWeight(), 100)
 
 console.log('All deterministic scoring tests passed.')

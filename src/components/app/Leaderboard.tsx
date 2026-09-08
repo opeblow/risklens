@@ -11,10 +11,10 @@ export default function Leaderboard() {
     <section className="mt-10">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">
-          Community attestations
+          My signed risk reviews
         </h2>
         <span className="text-xs text-noah-muted">
-          {attestations.length} signed review{attestations.length === 1 ? '' : 's'}
+          Stored locally on this device · {attestations.length} signed review{attestations.length === 1 ? '' : 's'}
         </span>
       </div>
 
@@ -25,7 +25,7 @@ export default function Leaderboard() {
           </p>
           <p className="mt-1 text-xs text-noah-muted-2">
             Analyze a token above and press{' '}
-            <span className="text-white">Attest with wallet</span> — your review
+            <span className="text-white">Sign & save review</span> — your review
             lands here.
           </p>
         </div>

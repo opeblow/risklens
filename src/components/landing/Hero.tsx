@@ -5,7 +5,7 @@ import { filterValidSearchResults, searchTokens } from '../../lib/solana/jupiter
 import type { TokenMeta } from '../../lib/types'
 import Spinner from '../ui/Spinner'
 
-const projectTypes = ['Token', 'Pool', 'Vault', 'Protocol']
+const tokenTypes = ['SPL Token', 'Token-2022', 'Native SOL']
 
 const examples = [
   'So11111111111111111111111111111111111111112',
@@ -77,35 +77,33 @@ export default function Hero() {
         <div className="animate-fade-up">
           <span className="inline-flex items-center gap-2 rounded-full border border-noah-border-2 bg-noah-surface/70 px-3.5 py-1.5 text-xs font-medium text-noah-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-noah-green" />
-            Built on Noah · Deployed on Solana
+            Built with NoahAI · Powered by live Solana data
           </span>
         </div>
 
         <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl animate-fade-up">
           Your DeFi{' '}
           <span className="text-gradient">Risk Copilot</span>
-          <br className="hidden sm:block" /> in one prompt
+          <br className="hidden sm:block" /> for Solana
         </h1>
 
         <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-noah-muted sm:text-lg animate-fade-up">
-          Paste any Solana token, pool, or vault address for an instant
-          plain-English risk breakdown with live market data and multi-factor
-          scoring.
+          Paste any Solana token mint for an instant plain-English risk breakdown
+          with live market data and multi-factor scoring.
         </p>
 
-        {/* project type pills */}
+        {/* token type labels */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-2 animate-fade-up">
-          {projectTypes.map((p, i) => (
-            <button
-              key={p}
-              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
-                i === 0
-                  ? 'border-noah-blue/50 bg-noah-blue/10 text-white'
-                  : 'border-noah-border-2 bg-noah-surface/60 text-noah-muted hover:text-white'
-              }`}
+          <span className="rounded-full border border-noah-border-2 bg-noah-surface/60 px-4 py-1.5 text-xs font-medium text-noah-muted">
+            Analyze any Solana token mint
+          </span>
+          {tokenTypes.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-noah-border-2 bg-noah-surface/40 px-4 py-1.5 text-xs font-medium text-noah-muted-2"
             >
-              {p}
-            </button>
+              {t}
+            </span>
           ))}
         </div>
 
@@ -205,8 +203,7 @@ export default function Hero() {
         <p className="mx-auto mt-6 max-w-xl text-xs leading-relaxed text-noah-muted-2 animate-fade-up">
           Live data from Solana mainnet + Jupiter. Scores are a heuristic
           copilot — not financial advice. RiskLens may make mistakes. Please use
-          with discretion.
-        </p>
+          with discretion.        </p>
       </div>
     </section>
   )

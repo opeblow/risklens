@@ -16,8 +16,8 @@ const steps = [
   },
   {
     n: '04',
-    title: 'Attest & share',
-    desc: 'Sign your assessment with your wallet, publish it to the community board, share the link.',
+    title: 'Sign & save',
+    desc: 'Sign your assessment with Phantom and save a verifiable review locally on this device.',
   },
 ]
 
@@ -27,11 +27,11 @@ export default function HowItWorks() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Idea to <span className="text-gradient">full risk report</span> — in
-            one prompt
+            Mint address to <span className="text-gradient">full risk report</span> — in
+            one search
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-noah-muted">
-            A single-prompt workflow applied to the thing every Solana user
+            A single-address workflow applied to the thing every Solana user
             actually needs: knowing what they're about to hold.
           </p>
         </div>

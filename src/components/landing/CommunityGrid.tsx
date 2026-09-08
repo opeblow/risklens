@@ -129,7 +129,7 @@ export default function CommunityGrid() {
         {attestations.length > 0 && (
           <div className="mt-10">
             <h3 className="text-sm font-semibold uppercase tracking-widest text-noah-muted-2">
-              Top community attestations
+              My signed risk reviews · stored on this device
             </h3>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {attestations.map((a) => (

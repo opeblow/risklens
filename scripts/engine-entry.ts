@@ -1,5 +1,6 @@
 export {
   analyzeMint,
+  baseModelWeight,
   buildFactors,
   buildReport,
   gradeForScore,
