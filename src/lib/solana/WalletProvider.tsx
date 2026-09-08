@@ -5,9 +5,7 @@ import {
 } from '@solana/wallet-adapter-react'
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom'
 import type { WalletError } from '@solana/wallet-adapter-base'
-
-const RPC =
-  import.meta.env.VITE_SOLANA_RPC ?? 'https://api.mainnet-beta.solana.com'
+import { getRpcEndpoints } from './rpc'
 
 function readableError(error: WalletError): string {
   switch (error?.name) {
@@ -42,7 +40,7 @@ export default function SolanaWalletProvider({
   }
 
   return (
-    <ConnectionProvider endpoint={RPC}>
+    <ConnectionProvider endpoint={getRpcEndpoints()[0]}>
       <WalletProvider wallets={wallets} autoConnect onError={onError}>
         {children}
       </WalletProvider>

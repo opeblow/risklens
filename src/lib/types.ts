@@ -116,9 +116,3 @@ export interface Attestation {
   signature: string
   createdAt: number
 }
-
-export interface AppSettings {
-  supabaseUrl?: string
-  supabaseKey?: string
-  anthropicKey?: string
-}

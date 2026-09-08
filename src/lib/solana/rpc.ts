@@ -19,7 +19,7 @@ const EXT_TRANSFER_HOOK = 13
 // Token-2022 mint base struct length (identical to classic SPL mint).
 const TOKEN_2022_MINT_BASE_LEN = 82
 
-function defaultEndpoints(): string[] {
+export function getRpcEndpoints(): string[] {
   const env = import.meta.env?.VITE_SOLANA_RPC as unknown
   if (typeof env === 'string' && env.trim()) return [env.trim()]
   return RPC_ENDPOINTS
@@ -34,7 +34,7 @@ let connection: Connection | null = null
 
 export function getConnection(): Connection {
   if (!connection) {
-    connection = new Connection(defaultEndpoints()[0], 'confirmed')
+    connection = new Connection(getRpcEndpoints()[0], 'confirmed')
   }
   return connection
 }
@@ -185,7 +185,7 @@ async function tryFetchParsedMint(
   mint: PublicKey,
 ): Promise<MintAccountResult | null | 'error'> {
   let lastError: unknown = null
-  const endpoints = defaultEndpoints()
+  const endpoints = getRpcEndpoints()
   for (let attempt = 0; attempt < endpoints.length; attempt++) {
     let conn = connection
     if (attempt > 0 || !conn) {
