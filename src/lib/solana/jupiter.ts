@@ -3,142 +3,252 @@ import type {
   JupiterTokenInfo,
   TokenMeta,
 } from '../types'
+import { isValidPubkey } from './rpc'
 
-const TOKEN_LIST_URL = 'https://token.jup.ag/all'
-const TOKEN_V1 = 'https://api.jup.ag/tokens/v1'
-const PRICE_V1 = 'https://price.jup.ag/v6/price?ids='
+// Current Jupiter APIs (Tokens V2 + Price V3); older /v1 and /v6 endpoints
+// are deprecated and no longer live.
+const TOKENS_V2 = 'https://api.jup.ag/tokens/v2'
+const PRICE_V3 = 'https://api.jup.ag/price/v3'
+const FETCH_TIMEOUT_MS = 10_000
+const TOKEN_INFO_TTL_MS = 120_000
 
-let cachedTokenList: Map<string, TokenMeta> | null = null
-let tokenListPromise: Promise<Map<string, TokenMeta>> | null = null
+const API_KEY = (import.meta.env?.VITE_JUPITER_API_KEY as unknown) as
+  | string
+  | undefined
 
-interface JupiterListToken {
-  address: string
-  symbol: string
-  name: string
-  decimals: number
-  logoURI?: string
-  daily_volume?: number
-  tags?: string[]
+async function fetchJson(url: string): Promise<unknown> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (API_KEY) headers['x-api-key'] = API_KEY
+    const res = await fetch(url, { headers, signal: controller.signal })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
-async function loadTokenList(): Promise<Map<string, TokenMeta>> {
-  if (cachedTokenList) return cachedTokenList
-  if (tokenListPromise) return tokenListPromise
+/** Coerce a finite number from unknown input (number or numeric string). */
+function num(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
 
-  tokenListPromise = (async () => {
-    const res = await fetch(TOKEN_LIST_URL, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) throw new Error('Failed to load token list')
-    const raw = (await res.json()) as JupiterListToken[]
-    const map = new Map<string, TokenMeta>()
-    for (const t of raw) {
-      if (!t.address) continue
-      map.set(t.address, {
-        mint: t.address,
-        symbol: t.symbol || '???',
-        name: t.name || t.symbol || 'Unknown',
-        decimals: t.decimals ?? 9,
-        logo: t.logoURI ?? null,
-        tags: Array.isArray(t.tags) ? t.tags : [],
-      })
+/**
+ * Normalize a timestamp to unix seconds. Accepts ISO date strings, seconds,
+ * and millisecond epochs; rejects NaN and garbage instead of leaking them
+ * into age calculations.
+ */
+export function parseTimestampSeconds(v: unknown): number | null {
+  if (typeof v === 'string' && v.trim()) {
+    const t = Date.parse(v.trim())
+    if (Number.isFinite(t)) return Math.floor(t / 1000)
+    return null
+  }
+  const n = num(v)
+  if (n == null) return null
+  if (n > 1e12) return Math.floor(n / 1000)
+  return Math.floor(n)
+}
+
+// --- Tokens V2 (search / metadata) -----------------------------------------
+
+interface TokenV2SearchItem {
+  id?: unknown
+  name?: unknown
+  symbol?: unknown
+  icon?: unknown
+  decimals?: unknown
+  mintedAt?: unknown
+  createdAt?: unknown
+  circSupply?: unknown
+  mcap?: unknown
+  dailyVolume?: unknown
+  isVerified?: unknown
+  organicScore?: unknown
+  tags?: unknown
+  audit?: Record<string, unknown>
+  stats24h?: Record<string, unknown>
+  liquidity?: unknown
+  usdPrice?: unknown
+}
+
+export function normalizeV2Token(raw: unknown): JupiterTokenInfo | null {
+  if (!raw || typeof raw !== 'object') return null
+  const t = raw as TokenV2SearchItem
+  if (typeof t.id !== 'string' || !t.id) return null
+
+  const stats = t.stats24h && typeof t.stats24h === 'object' ? t.stats24h : null
+  const buyVol = num(stats?.buyVolume)
+  const sellVol = num(stats?.sellVolume)
+  let daily_volume: number | undefined
+  if (buyVol != null && sellVol != null) daily_volume = buyVol + sellVol
+  else if (buyVol != null) daily_volume = buyVol
+
+  let audit: JupiterTokenInfo['audit'] = null
+  if (t.audit && typeof t.audit === 'object') {
+    audit = {
+      mintAuthorityDisabled:
+        typeof t.audit.mintAuthorityDisabled === 'boolean'
+          ? t.audit.mintAuthorityDisabled
+          : null,
+      freezeAuthorityDisabled:
+        typeof t.audit.freezeAuthorityDisabled === 'boolean'
+          ? t.audit.freezeAuthorityDisabled
+          : null,
+      topHoldersPercentage: num(t.audit.topHoldersPercentage),
+      devMints: num(t.audit.devMints),
     }
-    cachedTokenList = map
-    return map
-  })()
+  }
 
-  return tokenListPromise
+  let tags: JupiterTokenInfo['tags']
+  if (Array.isArray(t.tags) && t.tags.length) {
+    tags = Object.fromEntries(
+      t.tags.filter((x): x is string => typeof x === 'string').map((x) => [x, true]),
+    )
+  }
+
+  return {
+    address: t.id,
+    symbol: typeof t.symbol === 'string' ? t.symbol : undefined,
+    name: typeof t.name === 'string' ? t.name : undefined,
+    decimals: num(t.decimals) ?? undefined,
+    tags,
+    logoURI: typeof t.icon === 'string' && t.icon ? t.icon : undefined,
+    daily_volume,
+    created_at: parseTimestampSeconds(t.createdAt ?? t.mintedAt),
+    organicScore: num(t.organicScore),
+    isVerified: typeof t.isVerified === 'boolean' ? t.isVerified : null,
+    mcap: num(t.mcap),
+    circSupply: num(t.circSupply),
+    freeze_authority: null,
+    mint_authority: null,
+    permanent_delegate: null,
+    audit,
+  }
+}
+
+function toTokenMeta(t: JupiterTokenInfo): TokenMeta {
+  const tags = t.tags ? Object.keys(t.tags) : []
+  return {
+    mint: t.address,
+    symbol: t.symbol || '???',
+    name: t.name || t.symbol || 'Unknown',
+    decimals: t.decimals ?? 9,
+    logo: t.logoURI ?? null,
+    tags,
+  }
+}
+
+const tokenInfoCache = new Map<
+  string,
+  { at: number; value: Promise<JupiterTokenInfo | null> }
+>()
+
+async function fetchTokenInfo(mint: string): Promise<JupiterTokenInfo | null> {
+  try {
+    const raw = await fetchJson(
+      `${TOKENS_V2}/search?query=${encodeURIComponent(mint)}`,
+    )
+    if (!Array.isArray(raw)) return null
+    for (const item of raw) {
+      const t = normalizeV2Token(item)
+      if (t && t.address === mint) return t
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function getTokenInfo(mint: string): Promise<JupiterTokenInfo | null> {
+  const cached = tokenInfoCache.get(mint)
+  if (cached && Date.now() - cached.at < TOKEN_INFO_TTL_MS) return cached.value
+  const promise = fetchTokenInfo(mint)
+  tokenInfoCache.set(mint, { at: Date.now(), value: promise })
+  promise.catch(() => {
+    if (tokenInfoCache.get(mint)?.value === promise) {
+      tokenInfoCache.delete(mint)
+    }
+  })
+  return promise
+}
+
+export async function getTokenMeta(mint: string): Promise<TokenMeta | null> {
+  const info = await getTokenInfo(mint)
+  return info ? toTokenMeta(info) : null
+}
+
+/**
+ * Drop results whose mint string isn't a well-formed public key so an exact
+ * match within a search response can't be an invalid/arbitrary string.
+ */
+export function filterValidSearchResults<T extends { mint: string }>(
+  list: T[],
+): T[] {
+  return list.filter((t) => t && isValidPubkey(t.mint))
 }
 
 export async function searchTokens(
   query: string,
   limit = 8,
 ): Promise<TokenMeta[]> {
-  const q = query.trim().toLowerCase()
+  const q = query.trim()
   if (!q) return []
-  const map = await loadTokenList()
-  const results: TokenMeta[] = []
-  const matchesSymbol: TokenMeta[] = []
-  const matchesAddress = map.get(q)
-
-  for (const t of map.values()) {
-    if (t.mint === q) {
-      results.unshift(t)
-      break
-    }
-  }
-  if (matchesAddress && !results.includes(matchesAddress)) {
-    results.unshift(matchesAddress)
-  }
-  for (const t of map.values()) {
-    const sym = t.symbol?.toLowerCase() ?? ''
-    const name = t.name?.toLowerCase() ?? ''
-    if (sym === q || name === q) {
-      matchesSymbol.push(t)
-    }
-  }
-  for (const t of matchesSymbol) {
-    if (!results.includes(t)) results.push(t)
-  }
-  if (results.length < limit) {
-    for (const t of map.values()) {
-      if (t.symbol?.toLowerCase().startsWith(q)) {
-        if (!results.includes(t)) results.push(t)
-      }
-    }
-  }
-  if (results.length < limit) {
-    for (const t of map.values()) {
-      if (t.name?.toLowerCase().includes(q)) {
-        if (!results.includes(t)) results.push(t)
-      }
-    }
-  }
-  return results.slice(0, limit)
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-interface JupiterTokenInfoRes extends JupiterTokenInfo {
-  address: string
-}
-
-export async function getTokenInfo(mint: string): Promise<JupiterTokenInfo | null> {
   try {
-    const data = (await fetchJson(
-      `${TOKEN_V1}/token/${mint}`,
-    )) as JupiterTokenInfoRes
-    if (!data || typeof data.address !== 'string') return null
-    return {
-      address: data.address,
-      symbol: data.symbol,
-      name: data.name,
-      decimals: data.decimals,
-      tags: data.tags,
-      logoURI: data.logoURI,
-      daily_volume: data.daily_volume,
-      created_at: data.created_at,
-      freeze_authority: data.freeze_authority,
-      mint_authority: data.mint_authority,
-      permanent_delegate: data.permanent_delegate,
-      extensions: data.extensions,
+    const raw = await fetchJson(
+      `${TOKENS_V2}/search?query=${encodeURIComponent(q)}`,
+    )
+    if (!Array.isArray(raw)) return []
+    const out: TokenMeta[] = []
+    for (const item of raw) {
+      const t = normalizeV2Token(item)
+      if (!t) continue
+      const meta = toTokenMeta(t)
+      out.push(meta)
+      if (out.length >= limit) break
     }
+    return filterValidSearchResults(out)
   } catch {
-    return null
+    return []
   }
 }
 
-export interface JupPrice {
-  price: string
-  priceChange24h?: string | null
-  volume24h?: string | null
-  marketCap?: string | null
-  totalSupply?: string | null
-  circulatingSupply?: string | null
+// --- Price V3 -----------------------------------------------------------------
+
+interface PriceV3Entry {
+  createdAt?: unknown
+  liquidity?: unknown
+  usdPrice?: unknown
+  blockId?: unknown
+  decimals?: unknown
+  priceChange24h?: unknown
+}
+
+export function normalizeV3Price(
+  mint: string,
+  raw: unknown,
+): JupiterPrice | null {
+  if (!raw || typeof raw !== 'object') return null
+  const d = raw as PriceV3Entry
+  const price = num(d.usdPrice)
+  if (price == null) return null
+  return {
+    id: mint,
+    price: String(price),
+    priceChange24h: d.priceChange24h != null ? String(d.priceChange24h) : null,
+    volume24h: null,
+    marketCap: null,
+    totalSupply: null,
+    circulatingSupply: null,
+    liquidity: num(d.liquidity),
+  }
 }
 
 // Fallback when jup.ag is down: CoinGecko covers major Solana tokens
@@ -173,11 +283,7 @@ async function getCoinGeckoPrice(
       `https://api.coingecko.com/api/v3/simple/price` +
       `?ids=${id}&vs_currencies=usd` +
       `&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`
-    const res = await fetch(q, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) return null
-    const data = (await res.json()) as Record<string, CgPrice>
+    const data = (await fetchJson(q)) as Record<string, CgPrice>
     const d = data[id]
     if (!d || d.usd == null) return null
     return {
@@ -205,35 +311,25 @@ export async function getTokenPrice(
   let value: JupiterPrice | null = null
   try {
     const raw = (await fetchJson(
-      `${PRICE_V1}${encodeURIComponent(mint)}`,
-    )) as { data?: Record<string, JupPrice> }
-    const p = raw?.data?.[mint]
-    if (p) {
-      value = {
-        id: mint,
-        price: p.price ?? '0',
-        priceChange24h: p.priceChange24h ?? null,
-        volume24h: p.volume24h ?? null,
-        marketCap: p.marketCap ?? null,
-        totalSupply: p.totalSupply ?? null,
-        circulatingSupply: p.circulatingSupply ?? null,
-      }
-    }
+      `${PRICE_V3}?ids=${encodeURIComponent(mint)}`,
+    )) as Record<string, unknown>
+    value = normalizeV3Price(mint, raw?.[mint])
   } catch {
-    // jupiter down — fall through to CoinGecko
+    // jupiter down — fall through
+  }
+  if (value) {
+    // Enrich with market size / turnover from the metadata endpoint.
+    const token = await getTokenInfo(mint).catch(() => null)
+    if (token) {
+      if (token.mcap != null) value.marketCap = String(token.mcap)
+      if (token.circSupply != null)
+        value.circulatingSupply = String(token.circSupply)
+      if (token.daily_volume != null) value.volume24h = String(token.daily_volume)
+    }
   }
   if (!value) value = await getCoinGeckoPrice(mint)
   priceCache.set(mint, { at: Date.now(), value })
   return value
-}
-
-export async function getTokenMeta(mint: string): Promise<TokenMeta | null> {
-  try {
-    const map = await loadTokenList()
-    return map.get(mint) ?? null
-  } catch {
-    return null
-  }
 }
 
 // Twelve "top tokens" for the trending rail — pulled from a curated safe list

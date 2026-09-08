@@ -70,12 +70,11 @@ export default function Analyze() {
     e.preventDefault()
     const mint = input.trim()
     if (!isValidPubkey(mint)) {
-      setError('Enter a valid 44-character Solana token address.')
+      setError('Enter a valid Solana token address (32–44 chars base58).')
       return
     }
     setError(null)
     navigate(`/analyze/${mint}`)
-    run(mint)
   }
 
   return (
@@ -126,7 +125,6 @@ export default function Analyze() {
                 onClick={() => {
                   setInput(q.mint)
                   navigate(`/analyze/${q.mint}`)
-                  run(q.mint)
                 }}
                 className="rounded-full border border-noah-border-2 bg-noah-surface/60 px-3 py-1 text-[11px] font-medium text-noah-muted transition-colors hover:border-noah-blue/50 hover:text-white"
               >
@@ -166,7 +164,6 @@ export default function Analyze() {
                     onClick={() => {
                       setInput(m)
                       navigate(`/analyze/${m}`)
-                      run(m)
                     }}
                     className="rounded-full border border-noah-border-2 bg-noah-surface/60 px-3 py-1 font-mono text-[10px] text-noah-muted transition-colors hover:border-noah-blue/50 hover:text-white"
                   >
@@ -183,8 +180,8 @@ export default function Analyze() {
 
       <footer className="border-t border-noah-border py-6">
         <p className="mx-auto max-w-7xl px-4 text-center text-[11px] text-noah-muted-2 sm:px-6">
-          DeFi Risk Copilot — a Noah-built dApp on Solana. Live data via public
-          Solana RPC + Jupiter. Heuristic scoring, not financial advice. Noah AI
+          DeFi Risk Copilot — RiskLens on Solana. Live data via public
+          Solana RPC + Jupiter. Heuristic scoring, not financial advice. RiskLens
           may make mistakes. Please use with discretion.
         </p>
       </footer>

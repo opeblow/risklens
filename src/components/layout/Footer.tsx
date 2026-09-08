@@ -4,11 +4,11 @@ import Logo from '../ui/Logo'
 const cols = [
   {
     title: 'Product',
-    items: ['Full Stack Dapp', 'Solana Program', 'Mobile', 'Games', 'Pricing'],
+    items: ['Risk Analysis', 'Leaderboard', 'Community Reports'],
   },
   {
     title: 'Resources',
-    items: ['Docs', 'Community', 'Tutorial', 'Open Claw', 'Support'],
+    items: ['Docs', 'Community', 'Tutorial', 'Support'],
   },
   {
     title: 'Company',
@@ -62,7 +62,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-noah-border pt-6 text-xs text-noah-muted sm:flex-row">
-          <span>© 2026 Noah AI. All Rights Reserved.</span>
+          <span>© 2026 RiskLens. All Rights Reserved.</span>
           <span className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-noah-green" />

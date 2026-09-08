@@ -6,9 +6,7 @@ import Logo from '../ui/Logo'
 const links = [
   { label: 'Features', href: '#features' },
   { label: 'Community', href: '#community' },
-  { label: 'Open Claw', href: '#openclaw' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'Testimonials', href: '#community' },
+  { label: 'How It Works', href: '#how-it-works' },
 ]
 
 export default function Navbar() {
@@ -47,12 +45,7 @@ export default function Navbar() {
 
         <div className="hidden items-center gap-3 md:flex">
           <Link to="/analyze">
-            <Button variant="outline" size="sm">
-              Enter App
-            </Button>
-          </Link>
-          <Link to="/analyze">
-            <Button size="sm">Sign In →</Button>
+            <Button size="sm">Enter App →</Button>
           </Link>
         </div>
 
@@ -84,15 +77,10 @@ export default function Navbar() {
                 {l.label}
               </a>
             ))}
-            <div className="flex gap-3 pt-2">
-              <Link to="/analyze" className="flex-1">
-                <Button variant="outline" size="md" className="w-full">
-                  Enter App
-                </Button>
-              </Link>
-              <Link to="/analyze" className="flex-1">
+            <div className="pt-2">
+              <Link to="/analyze">
                 <Button size="md" className="w-full">
-                  Sign In →
+                  Enter App →
                 </Button>
               </Link>
             </div>

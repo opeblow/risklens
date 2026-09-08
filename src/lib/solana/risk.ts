@@ -6,7 +6,7 @@ import type {
   RiskLevel,
   RiskReport,
 } from '../types'
-import { getTokenInfo, getTokenMeta, getTokenPrice } from './jupiter'
+import { getTokenInfo, getTokenMeta, getTokenPrice, parseTimestampSeconds } from './jupiter'
 import { getMintInfo, isValidPubkey, UNKNOWN_SUPPLY } from './rpc'
 
 export const RISK_GRADES = [
@@ -71,7 +71,7 @@ function tagged(token: JupiterTokenInfo | null, tag: string): boolean {
   return token.tags[tag] === true
 }
 
-function buildFactors(i: ScoreInput): RiskFactor[] {
+export function buildFactors(i: ScoreInput): RiskFactor[] {
   const f: RiskFactor[] = []
   const onchain = i.onchain
   const token = i.token
@@ -116,10 +116,27 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
         'An authority can freeze token accounts, which can lock user balances or restrict trading at any time.',
       evidence: freezeAuth,
     })
+  } else if (onchain?.existsOnChain) {
+    f.push({
+      id: 'freeze',
+      title: 'Freeze authority revoked',
+      severity: 'low',
+      weight: 10,
+      score: 0,
+      detail:
+        'No account has the power to freeze balances — accounts cannot be locked or restricted.',
+      evidence: 'revoked',
+    })
   }
 
-  // 3. Permanent delegate (Jupiter exposes it)
-  if (token?.permanent_delegate) {
+  // 3. Permanent delegate + Token-2022 extension audit
+  const permDelegate =
+    token?.permanent_delegate ??
+    (onchain?.extensions?.audited && onchain.extensions.permanentDelegate
+      ? 'on-chain permanent delegate'
+      : null) ??
+    null
+  if (permDelegate) {
     f.push({
       id: 'delegate',
       title: 'Permanent delegate assigned',
@@ -128,8 +145,57 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
       score: 90,
       detail:
         'A permanent delegate can move tokens belonging to every holder without their approval (often used for taxation).',
-      evidence: token.permanent_delegate,
+      evidence: permDelegate,
     })
+  } else if (onchain?.standard === 'SPL-Token-2022' && onchain.extensions?.audited) {
+    f.push({
+      id: 'delegate',
+      title: 'No permanent delegate',
+      severity: 'low',
+      weight: 10,
+      score: 10,
+      detail:
+        'No permanent-delegate extension was detected on-chain — balances cannot be seized without each holder’s approval.',
+      evidence: 'none detected',
+    })
+  } else if (onchain?.standard === 'SPL-Token-2022') {
+    f.push({
+      id: 'delegate',
+      title: 'Token-2022 extensions not audited',
+      severity: 'medium',
+      weight: 10,
+      score: 50,
+      detail:
+        'Could not verify this mint’s Token-2022 extension layout. A hidden permanent delegate or transfer hook could seize or tax balances.',
+      evidence: 'extensions unverified',
+      unverified: true,
+    })
+  }
+  if (onchain?.standard === 'SPL-Token-2022' && onchain.extensions?.audited) {
+    if (onchain.extensions.transferHook) {
+      f.push({
+        id: 'transfer-hook',
+        title: 'Transfer hook enabled',
+        severity: 'high',
+        weight: 8,
+        score: 75,
+        detail:
+          'Every transfer triggers an external program, which can tax, blacklist, or otherwise interfere with transactions.',
+        evidence: 'transfer hook detected',
+      })
+    }
+    if (onchain.extensions.mintCloseAuthority) {
+      f.push({
+        id: 'mint-close',
+        title: 'Mint close authority present',
+        severity: 'medium',
+        weight: 6,
+        score: 60,
+        detail:
+          'The mint can be closed by an authority, which permanently destroys all outstanding tokens.',
+        evidence: 'mint-close extension detected',
+      })
+    }
   }
 
   // 4. Supply / circulating distribution
@@ -197,17 +263,30 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
       detail:
         'Could not verify what share of supply is circulating. On-chain total is known.',
       evidence: fmtUsd(total),
+      unverified: true,
+    })
+  } else if (onchain?.existsOnChain) {
+    f.push({
+      id: 'supply',
+      title: 'Supply data unavailable',
+      severity: 'medium',
+      weight: 15,
+      score: 50,
+      detail:
+        'Could not verify token supply totals for this mint.',
+      evidence: 'supply n/a',
+      unverified: true,
     })
   }
 
-  // 5. Liquidity health
+  // 5. Market size (liquidity health)
   const mcap = price?.marketCap ? Number(price.marketCap) : null
   const vol = price?.volume24h ? Number(price.volume24h) : token?.daily_volume
   if (mcap != null) {
     if (mcap < 50_000) {
       f.push({
         id: 'liquidity',
-        title: 'Very small market cap',
+        title: 'Very small market size',
         severity: 'high',
         weight: 15,
         score: 75,
@@ -217,7 +296,7 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
     } else if (mcap < 500_000) {
       f.push({
         id: 'liquidity',
-        title: 'Thin market cap',
+        title: 'Thin market size',
         severity: 'medium',
         weight: 15,
         score: 50,
@@ -227,7 +306,7 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
     } else {
       f.push({
         id: 'liquidity',
-        title: 'Healthy market cap',
+        title: 'Healthy market size',
         severity: 'low',
         weight: 15,
         score: 8,
@@ -277,9 +356,10 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
         score: 50,
         detail: 'Could not verify 24h trading volume for this token.',
         evidence: 'vol n/a',
+        unverified: true,
       })
     }
-  } else if (onchain?.existsOnChain || onchain?.rpcError) {
+  } else if (onchain?.existsOnChain) {
     f.push({
       id: 'liquidity',
       title: 'Market data unavailable',
@@ -289,6 +369,18 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
       detail:
         'Could not retrieve market cap / liquidity data right now. Verify on a DEX before trading.',
       evidence: 'mcap n/a',
+      unverified: true,
+    })
+    f.push({
+      id: 'turnover',
+      title: 'Volume data unavailable',
+      severity: 'medium',
+      weight: 10,
+      score: 50,
+      detail:
+        'Could not verify 24h trading volume or market depth for this token.',
+      evidence: 'vol n/a',
+      unverified: true,
     })
   }
 
@@ -327,7 +419,7 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
         evidence: `${chg > 0 ? '+' : ''}${chg.toFixed(1)}% 24h`,
       })
     }
-  } else if (price && onchain?.existsOnChain) {
+  } else if (onchain?.existsOnChain) {
     f.push({
       id: 'volatility',
       title: 'Price move unknown',
@@ -336,15 +428,12 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
       score: 50,
       detail: 'Could not determine 24h price movement.',
       evidence: '24h n/a',
+      unverified: true,
     })
   }
 
   // 7. Token age
-  const created = token?.created_at
-    ? token.created_at
-    : token?.minted_at
-      ? new Date(token.minted_at).getTime() / 1000
-      : null
+  const created = parseTimestampSeconds(token?.created_at ?? token?.minted_at ?? null)
   const ageDays = isoAgo(created)
   if (ageDays != null) {
     if (ageDays < 1) {
@@ -388,12 +477,22 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
         evidence: `age ${(ageDays / 30).toFixed(1)}mo`,
       })
     }
+  } else if (onchain?.existsOnChain) {
+    f.push({
+      id: 'age',
+      title: 'Token age unknown',
+      severity: 'medium',
+      weight: 5,
+      score: 50,
+      detail: 'Could not verify when this token was created or first traded.',
+      evidence: 'age n/a',
+      unverified: true,
+    })
   }
 
   // 8. Trust tag
-  const verified = tagged(token, 'verified')
+  const verified = tagged(token, 'verified') || token?.isVerified === true
   const community = tagged(token, 'community')
-  const unknown = token && !verified && !community && !token.tags
   if (verified) {
     f.push({
       id: 'trust',
@@ -413,19 +512,43 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
       weight: 10,
       score: 50,
       detail:
-        'Listed as a community token on Jupiter — sonewhat higher scrutiny is warranted.',
+        'Listed as a community token on Jupiter — a somewhat higher degree of scrutiny is warranted.',
       evidence: 'community',
     })
-  } else if (unknown) {
+  } else if (token && token.tags && Object.keys(token.tags).length > 0) {
     f.push({
       id: 'trust',
-      title: 'Unverified token',
+      title: 'Not verified',
       severity: 'high',
       weight: 10,
-      score: 70,
+      score: 60,
       detail:
-        'This mint is not in Jupiter’s curated lists. Exercise extra caution.',
+        'This mint does not carry Jupiter’s verified tag. Exercise extra caution.',
       evidence: 'unverified',
+    })
+  } else if (token) {
+    f.push({
+      id: 'trust',
+      title: 'No verification data',
+      severity: 'high',
+      weight: 10,
+      score: 65,
+      detail:
+        'No listing / verification evidence is available for this mint.',
+      evidence: 'unverified',
+      unverified: true,
+    })
+  } else if (onchain?.existsOnChain) {
+    f.push({
+      id: 'trust',
+      title: 'Trust status unverified',
+      severity: 'medium',
+      weight: 10,
+      score: 50,
+      detail:
+        'Could not verify this token’s listing or community status.',
+      evidence: 'trust n/a',
+      unverified: true,
     })
   }
 
@@ -446,21 +569,45 @@ function buildFactors(i: ScoreInput): RiskFactor[] {
   return f
 }
 
-function makeSummary(mint: string, score: number, f: RiskFactor[]): string {
+export function makeSummary(
+  mint: string,
+  score: number,
+  f: RiskFactor[],
+  limited: boolean,
+  missingChecks: number,
+): string {
   const worst = [...f].sort((a, b) => b.score - a.score)[0]
   const flags = f.filter((x) => x.score >= 70).length
   const g = gradeForScore(score)
+  const short = `${mint.slice(0, 6)}…${mint.slice(-4)}`
+  const limitedNote = limited
+    ? ` Market size, volume, age or trust signals could not be fully verified (${missingChecks} of ${f.length} checks unresolved) — this grade is provisional and not a "clean" verdict.`
+    : ''
   if (flags === 0 && score < 35) {
-    return `This mint looks relatively clean. No high-severity flags were found — ${g.label.toLowerCase()} score of ${score}/100 for ${mint.slice(0, 6)}…${mint.slice(-4)}.`
+    if (limited) {
+      return `Data coverage for ${short} is limited.${limitedNote} On the available evidence risk scores ${score}/100 (${g.label}).`
+    }
+    return `This mint looks relatively clean. No high-severity flags were found — ${g.label.toLowerCase()} score of ${score}/100 for ${short}.`
   }
   if (worst) {
-    return `Primary concern: ${worst.title.toLowerCase()}. ${flags} high-severity ${flags === 1 ? 'flag' : 'flags'} detected — overall risk ${g.label.toLowerCase()} (${score}/100) for ${mint.slice(0, 6)}…${mint.slice(-4)}.`
+    return `Primary concern: ${worst.title.toLowerCase()}. ${flags} high-severity ${flags === 1 ? 'flag' : 'flags'} detected — overall risk ${g.label.toLowerCase()} (${score}/100) for ${short}.${limitedNote}`
   }
   return `No strong signals detected. Risk score ${score}/100 (${g.label}).`
 }
 
 export function buildReport(i: ScoreInput): RiskReport {
   const factors = buildFactors(i)
+  const onchain = i.onchain
+  const missingChecks = factors.filter((x) => x.unverified === true).length
+  const hasMarket = i.price != null
+  const hasMeta = i.token != null
+  // Market evidence is complete when we have a price plus either metadata or
+  // a currency-derived market cap. An on-chain mint with neither price nor
+  // metadata must not present a "clean" verdict (issue: omitted factors
+  // previously caused misleadingly low scores).
+  const limited =
+    (onchain?.existsOnChain ?? false) &&
+    !(hasMarket && (hasMeta || i.price?.marketCap != null))
   const totalWeight = factors.reduce((a, b) => a + b.weight || a, 0) || 1
   const riskScore = Math.min(
     100,
@@ -491,10 +638,17 @@ export function buildReport(i: ScoreInput): RiskReport {
     riskScore,
     grade: g.grade,
     level: g.level,
-    summary: makeSummary(i.onchain?.mint ?? '', riskScore, factors),
+    summary: makeSummary(
+      i.onchain?.mint ?? '',
+      riskScore,
+      factors,
+      limited,
+      missingChecks,
+    ),
     factors,
     bullets,
     pulledAt: Date.now(),
+    coverage: { limited, missingChecks },
     token: i.token,
     price: i.price,
     onchain: i.onchain,

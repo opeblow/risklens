@@ -13,7 +13,8 @@ interface Showcase {
   img?: string
 }
 
-// Real Solana mints — every card re-analyzes live when clicked.
+// Real Solana mints — every card re-analyzes live when clicked. Values shown
+// are illustrative snapshots from earlier live runs, not live numbers.
 const showcases: Showcase[] = [
   {
     mint: 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',
@@ -104,11 +105,11 @@ export default function CommunityGrid() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-              Built by the Community
+              Risk Snapshots
             </h2>
             <p className="mt-2 max-w-xl text-sm text-noah-muted">
-              Real risk assessments produced by a single prompt — scored live
-              from Solana mainnet data, not a screenshot.
+              Illustrative scores from earlier live runs — click any card to
+              re-analyze that mint fresh from Solana mainnet + Jupiter.
             </p>
           </div>
           <Link

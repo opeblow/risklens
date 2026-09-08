@@ -1,10 +1,29 @@
 import { Connection, PublicKey, SystemProgram } from '@solana/web3.js'
-import type { OnchainMintInfo } from '../types'
+import type { OnchainMintInfo, Token2022ExtensionState } from '../types'
 
 export const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
 )
 const METADATA = 'metadata'
+
+// Classic SPL token program plus the Token-2022 program (string form, as
+// returned by getParsedAccountInfo).
+export const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+export const TOKEN_2022_PROGRAM_ID =
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+
+// Token-2022 TLV extension type codes (mint accounts).
+const EXT_MINT_CLOSE_AUTHORITY = 3
+const EXT_PERMANENT_DELEGATE = 12
+const EXT_TRANSFER_HOOK = 13
+// Token-2022 mint base struct length (identical to classic SPL mint).
+const TOKEN_2022_MINT_BASE_LEN = 82
+
+function defaultEndpoints(): string[] {
+  const env = import.meta.env?.VITE_SOLANA_RPC as unknown
+  if (typeof env === 'string' && env.trim()) return [env.trim()]
+  return RPC_ENDPOINTS
+}
 
 const RPC_ENDPOINTS = [
   'https://api.mainnet-beta.solana.com',
@@ -15,7 +34,7 @@ let connection: Connection | null = null
 
 export function getConnection(): Connection {
   if (!connection) {
-    connection = new Connection(RPC_ENDPOINTS[0], 'confirmed')
+    connection = new Connection(defaultEndpoints()[0], 'confirmed')
   }
   return connection
 }
@@ -131,29 +150,136 @@ type ParsedMintShape = {
   parsed?: { type?: string; info?: Record<string, unknown> }
 }
 
+export interface MintAccountResult {
+  owner: string
+  program: string
+  parsed: { type: string; info: Record<string, unknown> }
+}
+
+/**
+ * Accept an account as a mint only when it is an initialized mint account
+ * owned by a supported token program. Other parsed accounts (e.g. token
+ * accounts, non-token program owners) are rejected so they never enter the
+ * mint-analysis path.
+ */
+export function isMintAccount(account: unknown): account is MintAccountResult {
+  if (!account || typeof account !== 'object') return false
+  const acc = account as {
+    owner?: unknown
+    program?: unknown
+    data?: unknown
+  }
+  const owner = typeof acc.owner === 'string' ? acc.owner : ''
+  if (owner !== TOKEN_PROGRAM_ID && owner !== TOKEN_2022_PROGRAM_ID) {
+    return false
+  }
+  const data = acc.data as ParsedMintShape | null | undefined
+  if (!data?.parsed) return false
+  if (data.parsed.type !== 'mint') return false
+  const info = data.parsed.info as { isInitialized?: unknown } | null | undefined
+  if (!info || info.isInitialized !== true) return false
+  return true
+}
+
 async function tryFetchParsedMint(
   mint: PublicKey,
-): Promise<ParsedMintShape | null | 'error'> {
+): Promise<MintAccountResult | null | 'error'> {
   let lastError: unknown = null
-  for (let attempt = 0; attempt < RPC_ENDPOINTS.length; attempt++) {
+  const endpoints = defaultEndpoints()
+  for (let attempt = 0; attempt < endpoints.length; attempt++) {
     let conn = connection
     if (attempt > 0 || !conn) {
-      conn = new Connection(RPC_ENDPOINTS[attempt], 'confirmed')
+      conn = new Connection(endpoints[attempt], 'confirmed')
     }
     try {
       const res = await conn.getParsedAccountInfo(mint, 'confirmed')
       if (!res?.value) return null
       connection = conn
-      const account = res.value as unknown as { data?: unknown }
-      const data = account.data as ParsedMintShape | null
-      if (!data?.parsed || !data.parsed.info) return null
-      return data
+      if (!isMintAccount(res.value)) return null
+      const account = res.value as unknown as {
+        owner: string
+        program?: unknown
+        data: ParsedMintShape
+      }
+      const parsed = account.data.parsed!
+      return {
+        owner: account.owner,
+        program: typeof account.program === 'string' ? account.program : '',
+        parsed: {
+          type: parsed.type as string,
+          info: parsed.info as Record<string, unknown>,
+        },
+      }
     } catch (e) {
       lastError = e
     }
   }
   void lastError
   return 'error'
+}
+
+function isAllZero(buf: Uint8Array, off: number, len: number): boolean {
+  for (let i = off; i < off + len; i++) if (buf[i] !== 0) return false
+  return true
+}
+
+/**
+ * Scan a Token-2022 mint's TLV extension region (after the 82-byte base) for
+ * the high-risk extensions: permanent delegate, transfer hook, and a mint
+ * close authority. `audited` is false when the layout could not be parsed, so
+ * callers can surface an "unverified" check instead of omitting it silently.
+ */
+export function scanToken2022Extensions(
+  data: Uint8Array,
+): Token2022ExtensionState {
+  const state: Token2022ExtensionState = {
+    audited: false,
+    permanentDelegate: false,
+    mintCloseAuthority: false,
+    transferHook: false,
+  }
+  try {
+    if (data.length < TOKEN_2022_MINT_BASE_LEN) return state
+    let o = TOKEN_2022_MINT_BASE_LEN
+    while (o + 3 <= data.length) {
+      const type = data[o]
+      const len = (data[o + 1] << 8) | data[o + 2]
+      o += 3
+      if (len === 0) break
+      if (o + len > data.length) break
+      if (type === EXT_PERMANENT_DELEGATE && len >= 32) {
+        state.permanentDelegate = !isAllZero(data, o, 32)
+      } else if (type === EXT_MINT_CLOSE_AUTHORITY) {
+        state.mintCloseAuthority = true
+      } else if (type === EXT_TRANSFER_HOOK) {
+        state.transferHook = true
+      }
+      o += len
+    }
+    state.audited = true
+  } catch {
+    state.audited = false
+  }
+  return state
+}
+
+const UNAUDITED_EXT: Token2022ExtensionState = {
+  audited: false,
+  permanentDelegate: false,
+  mintCloseAuthority: false,
+  transferHook: false,
+}
+
+async function scanToken2022(
+  mint: PublicKey,
+): Promise<Token2022ExtensionState | null> {
+  try {
+    const raw = await getConnection().getAccountInfo(mint, 'confirmed')
+    if (!raw?.data) return UNAUDITED_EXT
+    return scanToken2022Extensions(raw.data)
+  } catch {
+    return UNAUDITED_EXT
+  }
 }
 
 export async function getMintInfo(
@@ -171,9 +297,11 @@ export async function getMintInfo(
     metadataSymbol: null,
     standard: null,
     existsOnChain: false,
+    extensions: null,
   }
 
-  // Native SOL is not an SPL mint (System Program account) — special-case it.
+  // Native SOL is handled separately: its account is an SPL mint, but its
+  // supply is tracked with lamports, not the mint's supply field.
   if (mintAddress === NATIVE_SOL_MINT) {
     base.existsOnChain = true
     base.decimals = 9
@@ -187,14 +315,14 @@ export async function getMintInfo(
     return base
   }
 
-  const data = await tryFetchParsedMint(mint)
-  if (data === 'error') {
+  const res = await tryFetchParsedMint(mint)
+  if (res === 'error') {
     base.rpcError = true
     return base
   }
-  if (!data?.parsed?.info) return base
+  if (!res) return base
 
-  const p = data.parsed.info as {
+  const p = res.parsed.info as {
     supply?: string | number
     decimals?: number
     mintAuthority?: string | null
@@ -203,11 +331,15 @@ export async function getMintInfo(
 
   base.existsOnChain = true
   base.supply =
-    typeof p.supply === 'string' ? p.supply : String(p.supply ?? '0')
+    typeof p.supply === 'string' ? p.supply : String(p.supply ?? UNKNOWN_SUPPLY)
   base.decimals = p.decimals ?? 0
   base.mintAuthority = p.mintAuthority ?? null
   base.freezeAuthority = p.freezeAuthority ?? null
-  base.standard = data.parsed!.type === 'mint' ? 'SPL-Token' : 'other'
+  base.standard =
+    res.owner === TOKEN_2022_PROGRAM_ID ? 'SPL-Token-2022' : 'SPL-Token'
+  if (base.standard === 'SPL-Token-2022') {
+    base.extensions = await scanToken2022(mint)
+  }
 
   try {
     const metaPda = deriveMetadataPDA(mint)

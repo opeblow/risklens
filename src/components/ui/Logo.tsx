@@ -25,7 +25,7 @@ export default function Logo({ size = 28 }: { size?: number }) {
         />
       </svg>
       <span className="text-[17px] font-semibold tracking-tight text-white">
-        Noah
+        RiskLens
       </span>
     </span>
   )

@@ -15,12 +15,22 @@ export interface JupiterTokenInfo {
   tags?: Record<string, boolean>
   logoURI?: string
   daily_volume?: number
-  created_at?: number
+  created_at?: number | null // unix seconds, normalized
   freeze_authority?: string | null
   mint_authority?: string | null
   permanent_delegate?: string | null
   minted_at?: string
   extensions?: Record<string, unknown>
+  organicScore?: number | null
+  isVerified?: boolean | null
+  mcap?: number | null
+  circSupply?: number | null
+  audit?: {
+    mintAuthorityDisabled?: boolean | null
+    freezeAuthorityDisabled?: boolean | null
+    topHoldersPercentage?: number | null
+    devMints?: number | null
+  } | null
 }
 
 export interface JupiterPrice {
@@ -33,6 +43,15 @@ export interface JupiterPrice {
   totalSupply: string | null
   circulatingSupply: string | null
   dailyVolume?: string
+  liquidity?: number | null
+}
+
+/** Result of scanning a Token-2022 mint's on-chain TLV extensions. */
+export interface Token2022ExtensionState {
+  audited: boolean
+  permanentDelegate: boolean
+  mintCloseAuthority: boolean
+  transferHook: boolean
 }
 
 export interface OnchainMintInfo {
@@ -46,6 +65,8 @@ export interface OnchainMintInfo {
   standard: string | null
   existsOnChain: boolean
   rpcError?: boolean
+  /** Only populated for Token-2022 mints; null when not applicable. */
+  extensions?: Token2022ExtensionState | null
 }
 
 export type RiskLevel = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
@@ -53,11 +74,13 @@ export type RiskLevel = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
 export interface RiskFactor {
   id: string
   title: string
-  severity: RiskLevel
+  severity: 'low' | 'medium' | 'high' | 'critical'
   weight: number
-  score: number // 0..100 (higher = more risk)
+  score: number
   detail: string
   evidence: string
+  /** True when this factor is a neutral placeholder because evidence is missing. */
+  unverified?: boolean
 }
 
 export interface RiskReport {
@@ -75,6 +98,11 @@ export interface RiskReport {
   token?: JupiterTokenInfo | null
   price?: JupiterPrice | null
   onchain?: OnchainMintInfo | null
+  /** How much of the intended evidence was actually verified. */
+  coverage?: {
+    limited: boolean
+    missingChecks: number
+  }
 }
 
 export interface Attestation {

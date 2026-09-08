@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isValidPubkey } from '../../lib/solana/rpc'
-import { searchTokens } from '../../lib/solana/jupiter'
+import { filterValidSearchResults, searchTokens } from '../../lib/solana/jupiter'
 import type { TokenMeta } from '../../lib/types'
 import Spinner from '../ui/Spinner'
 
-const projectTypes = ['Full Stack Dapp', 'Solana Program', 'Mobile', 'Games']
+const projectTypes = ['Token', 'Pool', 'Vault', 'Protocol']
 
 const examples = [
   'So11111111111111111111111111111111111111112',
@@ -18,11 +18,13 @@ export default function Hero() {
   const [results, setResults] = useState<TokenMeta[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchRef = useRef(0)
+  const debounceRef = useRef(0)
   const navigate = useNavigate()
 
   const run = (mint: string) => {
     if (!isValidPubkey(mint)) {
-      setError('Enter a valid Solana token address (44-char base58).')
+      setError('Enter a valid Solana token address (32–44 chars base58).')
       return
     }
     setError(null)
@@ -34,26 +36,29 @@ export default function Hero() {
     run(query.trim())
   }
 
-  const onSearch = async (value: string) => {
+  const onSearch = (value: string) => {
     setQuery(value)
     setError(null)
-    if (isValidPubkey(value.trim())) {
+    const q = value.trim()
+    if (isValidPubkey(q) || q.length < 2) {
+      window.clearTimeout(debounceRef.current)
       setResults([])
       return
     }
-    if (value.trim().length < 2) {
-      setResults([])
-      return
-    }
+    const requestId = ++searchRef.current
     setSearching(true)
-    try {
-      const found = await searchTokens(value, 6)
-      setResults(found.filter((t) => !isValidPubkey(t.mint)))
-    } catch {
-      setResults([])
-    } finally {
-      setSearching(false)
-    }
+    window.clearTimeout(debounceRef.current)
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const found = await searchTokens(q, 6)
+        if (requestId !== searchRef.current) return
+        setResults(filterValidSearchResults(found))
+      } catch {
+        if (requestId === searchRef.current) setResults([])
+      } finally {
+        if (requestId === searchRef.current) setSearching(false)
+      }
+    }, 250)
   }
 
   return (
@@ -199,7 +204,7 @@ export default function Hero() {
 
         <p className="mx-auto mt-6 max-w-xl text-xs leading-relaxed text-noah-muted-2 animate-fade-up">
           Live data from Solana mainnet + Jupiter. Scores are a heuristic
-          copilot — not financial advice. Noah AI may make mistakes. Please use
+          copilot — not financial advice. RiskLens may make mistakes. Please use
           with discretion.
         </p>
       </div>

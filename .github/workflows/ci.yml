@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 concurrency:
@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   build:
-    name: Lint, typecheck, build
+    name: Lint, typecheck, build, test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -37,3 +37,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build scoring engine (SSR bundle)
+        run: pnpm exec vite build --ssr scripts/engine-entry.ts --outDir .tmp-ssr
+
+      - name: Run deterministic scoring tests
+        run: node scripts/test-scoring.mjs

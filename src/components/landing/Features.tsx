@@ -46,7 +46,7 @@ export default function Features() {
             <span className="text-gradient">Every risk factor.</span>
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-noah-muted">
-            Noah generates the full risk stack — on-chain authority reading,
+            RiskLens generates the full risk stack — on-chain authority reading,
             live market intelligence, and weighted scoring — so you can size up
             any Solana mint in seconds.
           </p>

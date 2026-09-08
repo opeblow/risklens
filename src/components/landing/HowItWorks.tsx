@@ -6,7 +6,7 @@ const steps = [
   },
   {
     n: '02',
-    title: 'Noah reads the chain',
+    title: 'RiskLens reads the chain',
     desc: 'Mint & freeze authorities, delegates, supply, metadata, age and more — pulled in real time.',
   },
   {
@@ -23,7 +23,7 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <section className="py-20">
+    <section id="how-it-works" className="py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
@@ -31,9 +31,8 @@ export default function HowItWorks() {
             one prompt
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-noah-muted">
-            The same single-prompt workflow Noah is known for, applied to the
-            thing every Solana user actually needs: knowing what they’re about
-            to hold.
+            A single-prompt workflow applied to the thing every Solana user
+            actually needs: knowing what they're about to hold.
           </p>
         </div>
 

@@ -5,7 +5,6 @@ import CommunityGrid from '../components/landing/CommunityGrid'
 import HowItWorks from '../components/landing/HowItWorks'
 import Features from '../components/landing/Features'
 import Integrations from '../components/landing/Integrations'
-import Pricing from '../components/landing/Pricing'
 
 export default function Home() {
   return (
@@ -16,7 +15,6 @@ export default function Home() {
       <HowItWorks />
       <Features />
       <Integrations />
-      <Pricing />
       <Footer />
     </div>
   )

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import type { RiskReport } from '../../lib/types'
 import { gradeForScore } from '../../lib/solana/risk'
 import { shortAddress, signAttestationMessage } from '../../lib/solana/wallet'
@@ -20,7 +21,8 @@ function copyText(t: string) {
 }
 
 export default function RiskReportView({ report }: { report: RiskReport }) {
-  const { publicKey, signMessage, connected, connect } = useWallet()
+  const { publicKey, signMessage, connected } = useWallet()
+  const { setVisible } = useWalletModal()
   const [signed, setSigned] = useState(false)
   const [signing, setSigning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -36,9 +38,8 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
           : 'text-noah-red'
 
   const onAttest = async () => {
-    if (!publicKey || !signMessage) return
-    if (!connected) {
-      await connect()
+    if (!publicKey || !signMessage || !connected) {
+      setVisible(true)
       return
     }
     setSigning(true)
@@ -47,7 +48,7 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
       const message =
         `RiskLens attestation — I assessed ${report.mint} with my wallet. ` +
         `Score ${report.riskScore}/100 (${report.grade}). ` +
-        `Nonce: ${Date.now().toString(36)}. Signed to record this risk review on-chain.`
+        `Nonce: ${Date.now().toString(36)}.`
       const signature = await signAttestationMessage(message, signMessage)
       saveAttestation({
         id: `${address}-${report.mint}`,
@@ -55,7 +56,7 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
         symbol: report.symbol || '???',
         score: report.riskScore,
         grade: report.grade,
-        message: 'RiskLens attestation',
+        message,
         address,
         signature,
         createdAt: Date.now(),
@@ -153,13 +154,13 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
         </div>
         {!connected && (
           <p className="mt-3 text-[11px] text-noah-muted-2">
-            Connect Phantom to sign your risk review — it’s bound to your
-            wallet address and visible on the community board.
+            Connect a wallet to sign your risk review. The signed message is
+            stored locally in this browser and listed under Attestations.
           </p>
         )}
         {signed && (
           <p className="mt-3 text-[12px] font-medium text-noah-green">
-            Attestation published to your community board.
+            Signature stored in your local attestation history.
           </p>
         )}
       </Card>

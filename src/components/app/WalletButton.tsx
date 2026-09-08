@@ -1,12 +1,13 @@
 import { useWallet } from '@solana/wallet-adapter-react'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { useEffect, useState } from 'react'
 import Button from '../ui/Button'
 import { getAddressBalance, shortAddress } from '../../lib/solana/wallet'
 
 export default function WalletButton() {
-  const { connected, connect, disconnect, publicKey } = useWallet()
+  const { connected, disconnect, publicKey } = useWallet()
+  const { setVisible } = useWalletModal()
   const [balance, setBalance] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!publicKey) return
@@ -21,21 +22,7 @@ export default function WalletButton() {
 
   if (!connected || !publicKey) {
     return (
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          try {
-            await connect()
-          } catch {
-            // user cancelled
-          } finally {
-            setBusy(false)
-          }
-        }}
-      >
+      <Button size="sm" variant="outline" onClick={() => setVisible(true)}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="6" width="20" height="12" rx="3" />
           <path d="M16 12h.01" />
