@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import type { RiskReport } from '../../lib/types'
 import { gradeForScore } from '../../lib/solana/risk'
 import { shortAddress, signAttestationMessage } from '../../lib/solana/wallet'
+import usePhantomConnect from '../../lib/solana/usePhantomConnect'
 import { getAttestations, saveAttestation } from '../../lib/storage'
 import Card from '../ui/Card'
 import ScoreGauge from '../ui/ScoreGauge'
@@ -21,8 +20,8 @@ function copyText(t: string) {
 }
 
 export default function RiskReportView({ report }: { report: RiskReport }) {
-  const { publicKey, signMessage, connected } = useWallet()
-  const { setVisible } = useWalletModal()
+  const { connected, connecting, phantomReady, publicKey, requestConnect, signMessage } =
+    usePhantomConnect()
   const [signed, setSigned] = useState(false)
   const [signing, setSigning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -39,7 +38,7 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
 
   const onAttest = async () => {
     if (!publicKey || !signMessage || !connected) {
-      setVisible(true)
+      requestConnect()
       return
     }
     setSigning(true)
@@ -132,7 +131,7 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
           <Button
             size="sm"
             variant={hasSigned ? 'success' : 'primary'}
-            disabled={signing || hasSigned}
+            disabled={signing || hasSigned || connecting}
             onClick={onAttest}
           >
             {hasSigned
@@ -141,7 +140,11 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
                 ? 'Signing…'
                 : connected
                   ? 'Sign & save review'
-                  : 'Connect to sign'}
+                  : connecting
+                    ? 'Connecting…'
+                    : phantomReady
+                      ? 'Connect to sign'
+                      : 'Install Phantom'}
           </Button>
           <a
             className="inline-flex h-8 items-center rounded-xl px-3 text-xs font-medium text-noah-blue transition-colors hover:text-noah-blue-2"

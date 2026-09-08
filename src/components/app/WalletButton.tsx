@@ -1,12 +1,11 @@
-import { useWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { useEffect, useState } from 'react'
 import Button from '../ui/Button'
 import { getAddressBalance, shortAddress } from '../../lib/solana/wallet'
+import usePhantomConnect from '../../lib/solana/usePhantomConnect'
 
 export default function WalletButton() {
-  const { connected, disconnect, publicKey } = useWallet()
-  const { setVisible } = useWalletModal()
+  const { connected, connecting, disconnect, publicKey, phantomReady, requestConnect } =
+    usePhantomConnect()
   const [balance, setBalance] = useState<number | null>(null)
 
   useEffect(() => {
@@ -21,13 +20,29 @@ export default function WalletButton() {
   }, [publicKey])
 
   if (!connected || !publicKey) {
+    if (!phantomReady) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            window.open('https://phantom.app/download', '_blank', 'noopener noreferrer')
+          }
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Install Phantom
+        </Button>
+      )
+    }
     return (
-      <Button size="sm" variant="outline" onClick={() => setVisible(true)}>
+      <Button size="sm" variant="outline" onClick={requestConnect} disabled={connecting}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="6" width="20" height="12" rx="3" />
           <path d="M16 12h.01" />
         </svg>
-        Connect Wallet
+        {connecting ? 'Connecting…' : 'Connect Wallet'}
       </Button>
     )
   }
