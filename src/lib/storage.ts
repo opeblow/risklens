@@ -6,7 +6,7 @@ const K_REPORT_HISTORY = 'risklens::history'
 function read<T>(
   key: string,
   fallback: T,
-  validate: (v: unknown) => v is T = (v): v is T => true,
+  validate: (_v: unknown) => _v is T = (_v): _v is T => true,
 ): T {
   try {
     const raw = localStorage.getItem(key)
