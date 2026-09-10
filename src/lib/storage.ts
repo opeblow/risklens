@@ -1,7 +1,8 @@
-import type { Attestation } from './types'
+import type { Attestation, StoredReceipt } from './types'
 
 const K_ATTEST = 'risklens::attestations'
 const K_REPORT_HISTORY = 'risklens::history'
+const K_RECEIPTS = 'risklens::receipts'
 
 function read<T>(
   key: string,
@@ -75,6 +76,33 @@ export function pushHistory(mint: string): string[] {
 
 export function getHistory(): string[] {
   return read<string[]>(K_REPORT_HISTORY, [], isStringArray)
+}
+
+function isStoredReceipt(v: unknown): v is StoredReceipt {
+  if (!isRecord(v)) return false
+  return (
+    typeof v.signature === 'string' &&
+    typeof v.cluster === 'string' &&
+    typeof v.digest === 'string' &&
+    typeof v.publisher === 'string' &&
+    typeof v.mint === 'string' &&
+    typeof v.confirmedAt === 'number'
+  )
+}
+
+function isStoredReceiptArray(v: unknown): v is StoredReceipt[] {
+  return Array.isArray(v) && v.every(isStoredReceipt)
+}
+
+export function getStoredReceipts(): StoredReceipt[] {
+  return read<StoredReceipt[]>(K_RECEIPTS, [], isStoredReceiptArray)
+}
+
+export function saveStoredReceipt(r: StoredReceipt): StoredReceipt[] {
+  const list = getStoredReceipts()
+  const next = [r, ...list.filter((x) => x.signature !== r.signature)].slice(0, 50)
+  write(K_RECEIPTS, next)
+  return next
 }
 
 export interface PromptCache {

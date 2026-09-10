@@ -12,6 +12,7 @@ export default function usePhantomConnect() {
     disconnect,
     publicKey,
     select,
+    sendTransaction,
     signMessage,
     wallet,
     wallets,
@@ -56,6 +57,7 @@ export default function usePhantomConnect() {
     phantomReady,
     publicKey,
     requestConnect,
+    sendTransaction,
     signMessage,
   }
 }

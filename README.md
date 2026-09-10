@@ -35,6 +35,7 @@ RiskLens turns the cold, opaque wall of on-chain data into one decision: **how r
 - **Live data, resilient** — reads real mint/authority/supply state from Solana RPC and live market data (Jupiter, with a CoinGecko fallback), so the demo doesn't break when an API does.
 - **Trending picks** — 10 curated, verified mints (SOL, USDC, BONK, JUP, WIF, PYTH, jitoSOL, mSOL, JTO, MNDE).
 - **Wallet aware** — connect Phantom to see your SOL balance and sign a risk review, saved locally on this device (no backend).
+- **On-chain review receipts** — publish a fingerprint of any report to Solana as a wallet-signed Memo transaction (Devnet) and independently verify it later at `/receipts/:signature` in any fresh browser, no wallet required.
 
 ### Scoring model
 
@@ -63,6 +64,21 @@ Token-2022 mints may add transfer-hook and mint-close factors; the score denomin
 - Scores **never crash when a data source does**: if market data is unavailable, affected factors fall back to a neutral 50 so the rest of the report stays honest.
 - Prices are cached for 120 s; RPC endpoints are tried in order with failover.
 - Native SOL is detected and scored as a first-class asset, and invalid inputs report *"no SPL token mint found"* instead of a false "clean" verdict.
+
+---
+
+## On-chain review receipts
+
+Every RiskLens report can be **published** to Solana and **independently verified** — a VirusTotal-style "submit a sample → share a permanent result link" flow for token risk.
+
+- **Publish (wallet required):** each report is frozen into a canonical schema snapshot whose SHA-256 digest is written to the Solana **Memo program** (`MemoSq4gq…mfcHr`) as a wallet-signed transaction. The publisher wallet is a required signer on the memo instruction. No tokens are transferred, approved, or staked — publication simply proves *who* published *this exact fingerprint* on *this date*.
+- **Verify (no wallet, any fresh browser):** the `/receipts/:signature` page fetches the transaction from a fixed, allow-listed cluster RPC, parses the Memo instruction, extracts the published digest, and optionally compares it against an imported `risklens:report:v1` JSON to show "report matches the on-chain fingerprint" or that the report changed since publication.
+- **Network safety:** analysis stays on mainnet; receipts are published on **devnet** by default and labeled "Analysis: **Mainnet** · Receipt publication: **Devnet**" in the UI.
+- **Honest scope:** a receipt proves a signed fingerprint existed on-chain at a point in time. It is **not** a claim that the report is accurate, that the publisher is trustworthy, or that a token is "safe."
+
+**Memo format:** `risklens:v1:<network>:<mint>:<64-char-hex-digest>` (SHA-256 of `"RiskLens:report:v1\n" + canonical JSON snapshot`).
+
+Deterministic tests for the receipt pipeline (mocked RPC, no wallet/network) run in CI via `scripts/test-receipt.mjs`.
 
 ## Tech stack
 
@@ -106,6 +122,13 @@ node scripts/smoke.mjs   # USDC, SOL, jitoSOL, WIF, PYTH, and an invalid input
 ```
 
 Expected output is stable across runs (e.g. `USDC → 41/C`, `SOL → 13/A`); genuinely flaky results would indicate a live-data regression.
+
+The receipt pipeline is fully deterministic and tested headlessly with a mocked RPC (no wallet or network needed):
+
+```sh
+pnpm exec vite build --ssr scripts/engine-entry.ts --outDir .tmp-ssr
+node scripts/test-receipt.mjs   # publish flow, memo parsing, verification statuses
+```
 
 ## Project structure
 

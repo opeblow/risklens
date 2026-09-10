@@ -116,3 +116,16 @@ export interface Attestation {
   signature: string
   createdAt: number
 }
+
+/** A locally-saved onchain receipt record. */
+export interface StoredReceipt {
+  signature: string
+  cluster: string
+  digest: string
+  publisher: string
+  mint: string
+  symbol: string
+  analysisNetwork: string
+  confirmedAt: number
+  slot?: number
+}
