@@ -41,3 +41,6 @@ jobs:
 
       - name: Run deterministic scoring tests
         run: node scripts/test-scoring.mjs
+
+      - name: Run deterministic receipt tests
+        run: node scripts/test-receipt.mjs

@@ -3,13 +3,21 @@ import type { RiskReport } from '../../lib/types'
 import { gradeForScore } from '../../lib/solana/risk'
 import { shortAddress, signAttestationMessage } from '../../lib/solana/wallet'
 import usePhantomConnect from '../../lib/solana/usePhantomConnect'
-import { getAttestations, saveAttestation } from '../../lib/storage'
+import { getAttestations, saveAttestation, saveStoredReceipt } from '../../lib/storage'
+import {
+  buildSnapshot,
+  computeReportDigest,
+  publishReceipt,
+  type PublishStatus,
+} from '../../lib/solana/receipt'
 import Card from '../ui/Card'
 import ScoreGauge from '../ui/ScoreGauge'
 import Button from '../ui/Button'
 import RiskBadge from '../ui/RiskBadge'
 import { SeverityChip } from '../ui/RiskBadge'
 import { fmtUsd } from '../../lib/solana/risk'
+import PublishDialog from './PublishDialog'
+import { downloadReportJson } from './ReportExporter'
 
 function copyText(t: string) {
   try {
@@ -20,11 +28,15 @@ function copyText(t: string) {
 }
 
 export default function RiskReportView({ report }: { report: RiskReport }) {
-  const { connected, connecting, phantomReady, publicKey, requestConnect, signMessage } =
+  const { connected, connecting, phantomReady, publicKey, requestConnect, sendTransaction, signMessage } =
     usePhantomConnect()
   const [signed, setSigned] = useState(false)
   const [signing, setSigning] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
+  const [publishState, setPublishState] = useState<PublishStatus>('idle')
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const [confirmedSignature, setConfirmedSignature] = useState<string | null>(null)
 
   const g = gradeForScore(report.riskScore)
   const gradeColor =
@@ -68,11 +80,90 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
     }
   }
 
+  const startPublish = async () => {
+    if (publishState === 'submitted' || publishState === 'confirming') return
+    if (!connected || !publicKey || !sendTransaction) {
+      requestConnect()
+      return
+    }
+    setPublishOpen(true)
+    setPublishError(null)
+    setPublishState('review')
+  }
+
+  const approvePublish = async () => {
+    if (publishState !== 'review') return
+    if (!connected || !publicKey || !sendTransaction) {
+      setPublishState('failed')
+      setPublishError('Wallet is not connected. Connect Phantom and try again.')
+      return
+    }
+    // Freeze the snapshot before requesting the transaction — the displayed
+    // report is never silently refreshed during signing.
+    const snapshot = buildSnapshot(report)
+    let digest: string
+    try {
+      digest = await computeReportDigest(snapshot)
+    } catch {
+      setPublishState('failed')
+      setPublishError('Could not fingerprint the report snapshot.')
+      return
+    }
+    setPublishState('awaiting-wallet')
+    setPublishError(null)
+    try {
+      const receipt = await publishReceipt({
+        snapshot,
+        digest,
+        sendTransaction,
+        publicKey,
+        cluster: 'devnet',
+      })
+      setPublishState('confirming')
+      // Confirmed — record locally.
+      setConfirmedSignature(receipt.signature)
+      saveStoredReceipt({
+        signature: receipt.signature,
+        cluster: receipt.cluster,
+        digest: receipt.digest,
+        publisher: receipt.publisher,
+        mint: receipt.mint,
+        symbol: report.symbol || '???',
+        analysisNetwork: receipt.analysisNetwork,
+        confirmedAt: Date.now(),
+        slot: receipt.slot,
+      })
+      setPublishState('confirmed')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('WALLET_REJECTED')) {
+        setPublishState('rejected')
+        setPublishError('Approval was declined in your wallet. No transaction was sent.')
+      } else if (msg.includes('INSUFFICIENT_FUNDS')) {
+        setPublishState('failed')
+        setPublishError('Not enough Devnet SOL in this wallet. Fund it from the Devnet faucet and try again.')
+      } else if (msg.includes('BLOCKHASH_EXPIRED')) {
+        setPublishState('failed')
+        setPublishError('The transaction blockhash expired before confirmation. Please retry.')
+      } else if (msg.includes('TRANSACTION_FAILED')) {
+        setPublishState('failed')
+        setPublishError('The transaction failed on-chain. No receipt was recorded.')
+      } else if (msg.includes('CONFIRM_TIMEOUT')) {
+        setPublishState('unresolved')
+        setPublishError('The transaction was submitted but confirmation timed out. Check the explorer — the signature may still be valid.')
+      } else {
+        setPublishState('failed')
+        setPublishError(msg.replace(/^SUBMIT_FAILED: ?/, '') || 'Publication failed. Please retry.')
+      }
+    }
+  }
+
   const hasSigned = getAttestations().some(
     (a) => a.mint === report.mint && a.address === publicKey?.toBase58(),
   )
 
   const sorted = [...report.factors].sort((a, b) => b.score - a.score)
+  const publishing = publishState === 'submitted' || publishState === 'confirming'
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_1.3fr]">
@@ -146,6 +237,25 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
                       ? 'Connect to sign'
                       : 'Install Phantom'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={publishing}
+            onClick={startPublish}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19V5a2 2 0 012-2h13v16H6a2 2 0 01-2 2" />
+              <path d="M8 8h8M8 12h5" />
+            </svg>
+            {publishing ? 'Publishing…' : 'Publish on Solana'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => downloadReportJson(report)}
+          >
+            Download report
+          </Button>
           <a
             className="inline-flex h-8 items-center rounded-xl px-3 text-xs font-medium text-noah-blue transition-colors hover:text-noah-blue-2"
             href={`https://explorer.solana.com/address/${report.mint}`}
@@ -155,15 +265,38 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
             View on explorer ↗
           </a>
         </div>
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-noah-muted-2">
+          <span className="rounded-full border border-noah-border-2 bg-noah-surface/60 px-2 py-0.5">
+            Analysis: Mainnet
+          </span>
+          <span className="rounded-full border border-noah-border-2 bg-noah-surface/60 px-2 py-0.5">
+            Receipt publication: Devnet
+          </span>
+        </div>
         {!connected && (
           <p className="mt-3 text-[11px] text-noah-muted-2">
             Connect a wallet to sign your risk review. The signed message is
             stored locally in this browser under “My signed risk reviews”.
+            Publishing a receipt requires wallet approval on Devnet.
           </p>
         )}
         {signed && (
           <p className="mt-3 text-[12px] font-medium text-noah-green">
             Signature stored locally in “My signed risk reviews”.
+          </p>
+        )}
+        {publishState === 'confirmed' && confirmedSignature && (
+          <p className="mt-3 text-[12px] font-medium text-noah-green">
+            Receipt published to Devnet. Open it on the{' '}
+            <a
+              href={`https://explorer.solana.com/tx/${confirmedSignature}?cluster=devnet`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-noah-blue hover:text-noah-blue-2"
+            >
+              explorer
+            </a>
+            . Link: <span className="font-mono">/receipts/{confirmedSignature.slice(0, 8)}…</span>
           </p>
         )}
       </Card>
@@ -225,6 +358,28 @@ export default function RiskReportView({ report }: { report: RiskReport }) {
         <StatRow label="Decimals" value={String(report.onchain?.decimals ?? report.token?.decimals ?? 'n/a')} />
         <StatRow label="Pulled at" value={new Date(report.pulledAt).toLocaleTimeString()} />
       </div>
+
+      {publishOpen && (
+        <PublishDialog
+          report={report}
+          publicKey={publicKey?.toBase58() ?? null}
+          onClose={() => {
+            setPublishOpen(false)
+            setPublishState('idle')
+          }}
+          onCancel={() => {
+            setPublishOpen(false)
+            setPublishState('idle')
+          }}
+          onApprove={approvePublish}
+          publishState={{
+            status: publishState,
+            error: publishError ?? undefined,
+            digest: undefined,
+            signature: confirmedSignature ?? undefined,
+          }}
+        />
+      )}
     </div>
   )
 }
